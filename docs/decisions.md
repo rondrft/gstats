@@ -29,6 +29,26 @@ Both circles now take the same rotation and the same half-gap offset. Everything
 is derived from `RADIUS` and `GAP`, so changing either moves the arcs, the
 animation and the icon together.
 
+### The ring track is mixed from the background, not dimmed from the colour
+
+`src/render/color.ts`
+
+The track is the unfilled part of the ring, so it always covers the full arc. If
+it reads as strongly as the progress arc, the ring looks nearly complete whatever
+the value is.
+
+It was derived by multiplying the arc colour towards black. On a dark theme that
+lands near the background and works. On a light one it does the opposite:
+`#BC4C00` became `#291100`, an 18:1 contrast against white, and a 33% streak ring
+read as about 80% filled — the track was the boldest thing in it. **Reported from
+production, and the first place looked was the `stroke-dasharray`, which was
+correct all along.**
+
+It is now a step *from the background towards the colour*: 1.4:1 on light, and
+the dark themes unchanged. A test asserts the track stays under 3:1 against the
+background on every theme, since the next theme somebody adds will not have this
+in mind.
+
 ### Only the streak ring shows a real percentage
 
 `src/render/cards/terminal.ts`, `src/render/cards/gauge.ts`
@@ -148,6 +168,20 @@ given in viewBox units instead. **Written the idiomatic way first.**
 occupy a full monospace cell. Sizing on the digit count overflows the ring for
 any locale that groups thousands.
 
+### Language bars are scaled against the leader, not against 100%
+
+`src/render/langs.ts`
+
+Six cells across the whole 0-100% range makes one cell worth seventeen
+percentage points. A normal breakdown — 41/25/17/10 — drew as 2, 2, 1, 1: four
+bars that look the same and say nothing the percentages beside them do not
+already say. **Shipped that way and was visible in production.**
+
+Scaling against the leading language spends the resolution where the differences
+are, and the same breakdown reads 6, 4, 2, 1. The trade is real: a bar now
+compares within one card rather than between two. That is the comparison a reader
+actually makes, and the absolute figure is printed next to it either way.
+
 ### The language block preserves its whitespace
 
 `src/render/langs.ts`
@@ -204,6 +238,43 @@ stored field changes. `hasCurrentShape` validates on read and treats a mismatch
 as a miss — the key is a heuristic that depends on somebody remembering, and this
 is the guarantee. A missed bump now costs one extra upstream call instead of a
 card that throws.
+
+### The quota reading is sampled, not written per miss
+
+`src/cache.ts`
+
+It was written on every cache miss, alongside the stats entry — which made it
+*half* of every KV write the service performed, and KV writes are what the free
+plan runs out of first, forty-five times sooner than the GitHub quota it exists
+to protect.
+
+It feeds `/health` and the low-quota fallback. Neither needs a value accurate to
+the request, so it is now sampled at most once every five minutes. The exception
+is the first crossing below 1,000 remaining, which is written immediately: an
+instance running out should be visible at once, not up to five minutes later.
+Once already below the line the interval takes over again, because that is
+exactly when the instance is busiest and least able to afford a write per
+request.
+
+The cost is one KV read before each write. Reads are the plentiful quota and
+writes are the scarce one, so trading one for one is the whole point.
+
+### A failed fetch serves the expired entry
+
+`src/stats.ts`, `src/index.ts`
+
+Entries survive seven days against six hours of freshness for exactly this: when
+GitHub is unreachable — rate limited, 5xx, timeout, network — an expired entry is
+served with a `200`, `X-Stale: true` and a ten-minute lifetime. The error card is
+only for a profile that has never been fetched at all.
+
+A card a few hours behind is worth more to a reader than a card that says
+"upstream error", and this is the step that stops an exhausted write budget from
+becoming an outage; see [limits.md](limits.md#the-cascade).
+
+The short lifetime carries no `stale-while-revalidate` on purpose. That directive
+would let Camo keep showing the stale card past even the ten minutes, which is
+the opposite of what is wanted while the service is trying to recover.
 
 ### `max-age` and KV freshness are separate levers
 

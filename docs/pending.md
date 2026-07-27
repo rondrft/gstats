@@ -3,6 +3,11 @@
 In priority order. The reason matters more than the item — several of these look
 like polish and are not.
 
+Recently closed, so nobody goes looking for them: stale-while-error, the
+language bars that did not scale with their percentage, the ring track that made
+a third look like four fifths on light themes, and the quota reading that was
+written on every cache miss.
+
 ---
 
 ## 1. IP rate limiting — blocking for sharing the instance
@@ -21,52 +26,7 @@ top of the per-token limit that endpoint already has.
 This is listed first because it is the one thing that has to be true before the
 instance URL is shared with anybody.
 
-## 2. Stale-while-error — what stops the cascade
-
-When GitHub returns 403 and there is no fresh entry, `/api` renders a "rate
-limited" card. It should instead serve the *expired* entry, if one exists, and
-only fall through to the error card when there is genuinely nothing.
-
-The groundwork is already there and unused: `KV_EXPIRE_SECONDS` is seven days
-against six hours of freshness, precisely so an expired entry is still sitting
-there. `getStats` only reaches for it when the *quota reading* says the budget is
-low, not when a request actually fails.
-
-The failure this prevents is described in [limits.md](limits.md#the-cascade):
-KV writes exhausted → nothing cached → every request a miss → GitHub drained →
-nothing to fall back on → every card breaks at once. This is the step that turns
-a quota problem into an outage.
-
-## 3. Bug: language bars do not scale with the percentage
-
-**Visible in production.** In the default `lang_style=blocks`, 41%, 30% and 28%
-all draw as two blocks.
-
-The cause is resolution, not arithmetic. `blockCount` quantises to six cells, so
-one cell is about 17 percentage points:
-
-| Share | Blocks drawn |
-| --- | --- |
-| 41% | 2 |
-| 30% | 2 |
-| 28% | 2 |
-| 17% | 1 |
-| 10% | 1 |
-
-Anything between 25% and 41% is indistinguishable, which is exactly the range
-most language breakdowns live in. The percentage beside it carries the real
-information, so the bar is currently decoration.
-
-`lang_style=bars` is unaffected — it scales a `<rect>` and renders those three as
-16, 12 and 11 pixels — as is the `gauge` panel. Only the default is wrong.
-
-Fixes worth considering: use eighth-block characters (`▏▎▍▌▋▊▉█`) for eight times
-the resolution at the same width, or normalise against the leading language
-rather than against 100%. The first keeps the bars comparable between cards; the
-second makes the differences more visible within one card. They are not the same
-decision and the first is probably right.
-
-## 4. Streak timezone: default to Anywhere on Earth
+## 2. Streak timezone: default to Anywhere on Earth
 
 Streaks are computed in UTC and documented as such, which is defensible — see
 [decisions.md](decisions.md#streaks-are-computed-in-utc-and-todays-zero-does-not-break-one).
@@ -80,24 +40,25 @@ people who want their own zone, with AoE as the default.
 
 This changes what a stored figure means, so it requires a `SCHEMA_VERSION` bump.
 
-## 5. Reduce KV writes
+## 3. Reduce KV writes further
 
-The binding constraint is writes ([limits.md](limits.md)), and two of them are
-cheap to remove.
-
-**The quota reading is written on every miss.** `fetchAndStore` writes
-`v2:rate-limit` alongside the stats entry, so it is *half* the total write cost —
-four of the eight writes an active profile spends per day. It only needs to be
-accurate enough to notice the budget running down; writing at most once every few
-minutes would halve the daily total and change nothing that depends on it.
+The binding constraint is writes ([limits.md](limits.md)). The quota reading has
+been dealt with — sampled rather than written per miss, which took an active
+profile from eight writes a day to four. Two smaller ones remain.
 
 **The `warm:last-run` record is written every run**, 96 times a day, whether or
-not anything changed. Writing only on a changed outcome saves nearly 10% of the
-free budget — but note the tension: the timestamp *is* the liveness signal, and a
-record that stops updating on a healthy instance is indistinguishable from a cron
-that has stopped. Probably: write on any change, and otherwise at most hourly.
+not anything changed — about 10% of the free budget on its own. Writing only on
+a changed outcome would recover most of it, but note the tension: the timestamp
+*is* the liveness signal, and a record that stops updating on a healthy instance
+is indistinguishable from a cron that has stopped. Probably: write on any change
+and otherwise at most hourly.
 
-## 6. Move the language parameters out of the cache key
+**The sampling interval is a dial.** Five minutes costs 288 writes a day for the
+whole instance, which the ceiling is now paid out of. Fifteen minutes would take
+that to 96 and the free ceiling from ~178 to ~226, at the price of a coarser
+`/health`. Worth revisiting if an instance ever gets close.
+
+## 4. Move the language parameters out of the cache key
 
 `lang_mode`, `langs_count`, `exclude_langs` and `include_langs` are all in the
 cache key, so switching any of them costs a full refetch — even though the
@@ -110,7 +71,7 @@ weight lands on every profile whether or not anybody uses a non-default setting.
 
 Worth measuring before doing. It may be the wrong trade.
 
-## 7. `WHITELIST` for self-hosting with a private token
+## 5. `WHITELIST` for self-hosting with a private token
 
 [docs/self-hosting.md](self-hosting.md#private-repositories) documents how to run
 an instance with a `repo`-scoped token so your own private repositories count —
@@ -127,7 +88,7 @@ for at all; anything else gets the "user not found" card. Small to build. Listed
 here rather than higher because it only matters for one deployment mode, and that
 mode is currently documented as "do not".
 
-## 8. The `pass` design is cramped, and has an artefact
+## 6. The `pass` design is cramped, and has an artefact
 
 Both verified in the source rather than only by eye.
 

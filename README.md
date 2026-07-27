@@ -6,63 +6,144 @@ GitHub stats cards for your README. Contributions, streaks and languages, render
 [![License: MIT](https://img.shields.io/badge/license-MIT-1D9E75?style=flat-square&labelColor=080D08)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/rondrft/phosphor-stats?style=flat-square&labelColor=080D08&color=EF9F27)](https://github.com/rondrft/phosphor-stats/stargazers)
 
-![A phosphor-stats card](docs/assets/hero.svg)
-
-If it is useful to you, [a star](https://github.com/rondrft/phosphor-stats) helps other people find it.
-
----
-
-## Usage
-
-Paste this into your README and replace `USERNAME` with your GitHub login:
+![A phosphor-stats card](docs/assets/terminal.svg)
 
 ```markdown
 ![My GitHub stats](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME)
 ```
 
-Or build one visually at **[phosphor-stats.rondrft.workers.dev](https://phosphor-stats.rondrft.workers.dev)** — pick a theme, toggle the modules, copy the snippet.
+That is the whole thing. Replace `USERNAME`, paste it in — no account to connect,
+no permission to grant, nothing to authorise. Only public data is used.
 
-> The host above is the public instance. If you deploy your own, swap it for your
-> own Worker URL and nothing else changes.
+If it is useful to you, [a star](https://github.com/rondrft/phosphor-stats)
+helps other people find it.
 
-Only public data is used, and no account ever needs to authorise anything.
-
-## Themes
-
-Set one with `&theme=`. Individual colours can be overridden on top of any theme.
-
-<table>
-<tr><td><code>phosphor</code> <em>(default)</em></td></tr>
-<tr><td><img src="docs/assets/theme-phosphor.svg" alt="phosphor theme"></td></tr>
-<tr><td><code>?theme=amber</code></td></tr>
-<tr><td><img src="docs/assets/theme-amber.svg" alt="amber theme"></td></tr>
-<tr><td><code>?theme=ice</code></td></tr>
-<tr><td><img src="docs/assets/theme-ice.svg" alt="ice theme"></td></tr>
-<tr><td><code>?theme=mono</code></td></tr>
-<tr><td><img src="docs/assets/theme-mono.svg" alt="mono theme"></td></tr>
-<tr><td><code>?theme=light</code></td></tr>
-<tr><td><img src="docs/assets/theme-light.svg" alt="light theme"></td></tr>
-</table>
+---
 
 ## Designs
 
-Pick one with `&card=`. Every design honours `theme`, `hide`, `locale` and
-`animate`, so the two axes are independent.
+Six of them, set with `&card=`. Each is shown below in a different theme, but the
+two are independent: **any design works with any theme**, and with any colour
+override on top. Try combinations at
+**[phosphor-stats.rondrft.workers.dev](https://phosphor-stats.rondrft.workers.dev)**,
+which builds the snippet for you.
 
-| `?card=` | What it is |
-| --- | --- |
-| `terminal` *(default)* | Three rings and a language column. |
-| `heatmap` | The trailing year, day by day. The only design that shows something the others cannot. |
-| `pass` | A boarding pass, with the streak on a perforated stub. |
-| `press` | A newspaper front page, set in serif. |
-| `gauge` | An instrument panel. Needles, no numbers inside the dials. |
-| `vinyl` | A record and its tracklist. Turns, once every eight seconds. |
+### `terminal` — three rings and a language column
+
+The default, in the phosphor palette the project is named for.
+
+![terminal design](docs/assets/terminal.svg)
+
+```markdown
+![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME)
+```
+
+### `heatmap` — the trailing year, day by day
+
+The only design that shows something the others cannot. Intensity is graded
+against your own distribution, so a quiet year and a busy one both get contrast.
+
+![heatmap design](docs/assets/heatmap.svg)
+
+```markdown
+![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&card=heatmap&theme=ice)
+```
+
+### `press` — a newspaper front page
+
+Serif, on paper, with the current streak as the one spot of ink colour.
+
+![press design](docs/assets/press.svg)
+
+```markdown
+![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&card=press&theme=light)
+```
+
+### `gauge` — an instrument panel
+
+Needles, and no numbers inside the dials. The streak needle measures against your
+own record, so full deflection means a personal best in progress.
+
+![gauge design](docs/assets/gauge.svg)
+
+```markdown
+![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&card=gauge&theme=mono)
+```
+
+### `vinyl` — a record and its tracklist
+
+Turns, once every eight seconds. `&animate=false` stops it.
+
+![vinyl design](docs/assets/vinyl.svg)
+
+```markdown
+![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&card=vinyl&theme=amber)
+```
+
+### `pass` — a boarding pass
+
+Shown with no named theme at all, only colour overrides — every design takes
+them, so you are not limited to the five presets.
+
+![pass design](docs/assets/pass.svg)
+
+```markdown
+![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&card=pass&bg=F4EDE1&accent=C1432B&text=2B2118&muted=7A6A57&border=D6C6AC)
+```
+
+### Themes
+
+`phosphor` *(default)*, `amber`, `ice`, `mono` and `light`, set with `&theme=`.
+Any individual colour can be overridden on top of any of them.
 
 A published design never changes and is never removed: the URL in your README is
 a promise, and a redesign would silently rewrite a page you are not watching. A
 new look ships under a new id.
 
-## How languages are counted
+---
+
+## Options
+
+<details>
+<summary><strong>Every parameter</strong></summary>
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `username` | string | — | **Required.** A GitHub login. |
+| `card` | string | `terminal` | `terminal`, `heatmap`, `pass`, `press`, `gauge`, `vinyl`. |
+| `theme` | string | `phosphor` | `phosphor`, `amber`, `ice`, `mono`, `light`. |
+| `ring` | hex | theme | Colour of the contribution and record rings. |
+| `accent` | hex | theme | Colour of the streak ring and its icon. |
+| `bg` | hex | theme | Card background. Accepts `transparent`. |
+| `text` | hex | theme | Colour of the numbers and the language rows. |
+| `muted` | hex | theme | Colour of the labels. |
+| `border` | hex | theme | Inner frame. `none` hides it. |
+| `radius` | 0–24 | `6` | Corner radius of the card. |
+| `hide` | csv | — | Modules to omit: `total`, `streak`, `best`, `langs`. |
+| `langs_count` | 1–8 | `4` | How many languages to list. |
+| `lang_mode` | string | `bytes` | How languages are ranked. See below. |
+| `exclude_langs` | csv | — | Languages to leave out, case-insensitive. |
+| `include_langs` | csv | — | Re-admit a language from the default exclusions. |
+| `lang_style` | string | `blocks` | `blocks` or `bars`. |
+| `scanlines` | bool | `true` | CRT banding over the background. |
+| `animate` | bool | `true` | Draw-on animation. |
+| `locale` | string | `en` | Label language: `en` or `es`. |
+| `show_credit` | bool | `false` | Adds a small project credit to the card. |
+| `cache_seconds` | 1800–86400 | instance default | How long a client may reuse the card. |
+
+Colours are accepted with or without a leading `#`, in 3, 4, 6 or 8 digits.
+Anything that fails validation falls back to the theme rather than breaking the
+card, and out-of-range numbers are clamped rather than rejected.
+
+The card never returns an error status. A username that does not exist, an
+exhausted rate limit or an upstream failure all render as a readable card with a
+`200` — a non-200 in a README shows up as a broken image and tells the reader
+nothing.
+
+</details>
+
+<details>
+<summary><strong>How languages are counted</strong></summary>
 
 Summing bytes across an account measures how much code exists, which is not what
 a reader thinks they are looking at. One generated stylesheet, one vendored
@@ -83,25 +164,45 @@ corrections are applied by default:
 None of this measures skill or effort, and it could not. It is a heuristic tuned
 to be wrong less often than raw byte counts are.
 
-### `lang_mode`
+`lang_mode=repos` ignores size entirely and counts the repositories each language
+leads. It is cruder, and for a lot of profiles closer to the truth — a portfolio
+of eight small Rust services and one enormous inherited Java monolith reads very
+differently under the two.
 
 ```markdown
-<!-- bytes (default): weighted, capped byte counts -->
-![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&lang_mode=bytes)
-
-<!-- repos: how many repositories each language leads -->
 ![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&lang_mode=repos)
-```
-
-`repos` ignores size entirely and counts the repositories a language is the main
-one in. It is cruder, and for a lot of profiles it is closer to the truth — a
-portfolio of eight small Rust services and one enormous inherited Java monolith
-reads very differently under the two.
-
-```markdown
-<!-- put CSS back in, and drop Go -->
 ![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&include_langs=CSS&exclude_langs=Go)
 ```
+
+Bar length is scaled against the leading language, so the leader fills its row.
+The percentage beside it is the true share of the total.
+
+</details>
+
+---
+
+## Known limitations
+
+Worth reading before opening an issue — most of these are inherent rather than
+fixable.
+
+- **GitHub caches the image and it cannot be purged from outside.** READMEs are
+  served through Camo. A card is at best `max-age` behind, which is 30 minutes.
+  About half an hour is achievable for an embedded card; "instant" is not, for
+  anybody. Opening the `/api` URL directly bypasses Camo and shows the current
+  figures.
+- **Streaks are computed in UTC.** A day boundary has to be drawn somewhere, and
+  a Worker runs in whichever data centre is closest to the reader — anything
+  derived from local time would give a different answer per continent. If you
+  live far from UTC your streak may tick over at an unfamiliar hour.
+- **A zero on today does not break your streak.** The day is not over yet. The
+  streak only ends once yesterday is also empty.
+- **Public repositories only**, and forks are excluded from the language totals
+  so that forking a large project does not rewrite your breakdown.
+- **Languages are sampled**, not exhaustive: the 300 most recently pushed
+  repositories are scanned. Beyond that the percentages do not move visibly.
+- **The public instance is best effort.** One GitHub token shared by everyone
+  using it, and nobody is on call for it.
 
 ### Private repositories
 
@@ -109,130 +210,45 @@ reads very differently under the two.
 reaches exactly what its owner reaches, so a third party's private repositories
 are unreachable, without exception. Giving the shared token private access would
 publish the language breakdown of the private code belonging to whoever
-configured it — that is a leak wearing a feature's clothes, and there is no
-version of it that is safe to offer publicly.
+configured it — a leak wearing a feature's clothes.
 
 What does work: [self-host](docs/self-hosting.md#private-repositories) with your
-own token and restrict the instance to your own username. Your private code
-stays yours and nothing is exposed.
+own token and restrict the instance to your own username.
 
 Separately, and worth knowing: turning on **Settings → Profile → Include private
 contributions on my profile** makes your contribution total count private work
 without revealing anything about it. It costs nothing and a lot of people do not
 know it exists.
 
-## Variants
+---
 
-`?lang_style=bars` swaps the block characters for rectangles tinted with each
-language's own colour:
+## Running your own
 
-![bar language style](docs/assets/lang-style-bars.svg)
-
-`?hide=langs` drops the language column, and the card narrows to fit:
-
-![card without the language block](docs/assets/hide-langs.svg)
-
-## Parameters
-
-| Parameter | Type | Default | Description |
-| --- | --- | --- | --- |
-| `username` | string | — | **Required.** A GitHub login. |
-| `card` | string | `terminal` | Design: `terminal`, `heatmap`, `pass`, `press`, `gauge`, `vinyl`. |
-| `theme` | string | `phosphor` | `phosphor`, `amber`, `ice`, `mono`, `light`. |
-| `lang_mode` | string | `bytes` | How languages are ranked. See below. |
-| `include_langs` | csv | — | Re-admit a language from the default exclusions. |
-| `ring` | hex | theme | Colour of the contribution and record rings. |
-| `accent` | hex | theme | Colour of the streak ring and its icon. |
-| `bg` | hex | theme | Card background. Accepts `transparent`. |
-| `text` | hex | theme | Colour of the numbers and the language rows. |
-| `muted` | hex | theme | Colour of the labels. |
-| `border` | hex | theme | Inner frame. `none` hides it. |
-| `radius` | 0–24 | `6` | Corner radius of the card. |
-| `hide` | csv | — | Modules to omit: `total`, `streak`, `best`, `langs`. |
-| `langs_count` | 1–8 | `4` | How many languages to list. |
-| `exclude_langs` | csv | — | Languages to leave out, case-insensitive. |
-| `lang_style` | string | `blocks` | `blocks` or `bars`. |
-| `scanlines` | bool | `true` | CRT banding over the background. |
-| `animate` | bool | `true` | Draw-on animation for the rings. |
-| `locale` | string | `en` | Label language: `en` or `es`. |
-| `show_credit` | bool | `false` | Adds a small project credit to the card. |
-| `cache_seconds` | 1800–86400 | instance default | How long a client may reuse the card. |
-
-Colours are accepted with or without a leading `#`, in 3, 4, 6 or 8 digits.
-Anything that fails validation falls back to the theme rather than breaking the
-card. Out-of-range numbers are clamped, not rejected.
-
-The card never returns an error status. A username that does not exist, an
-exhausted rate limit or an upstream failure all render as a readable card with a
-`200`, because a non-200 in a README shows up as a broken image and tells the
-reader nothing.
-
-## Self-hosting
-
-The public instance is **best effort**. It runs on a single GitHub token with a
-shared budget of 5,000 requests per hour, and nobody is on call for it. If your
-README matters to you, run your own — it takes about five minutes and gives you
-your own budget.
-
-**→ [docs/self-hosting.md](docs/self-hosting.md)**
+About five minutes, and it fits inside the Cloudflare free tier.
 
 ```bash
 git clone https://github.com/rondrft/phosphor-stats
 cd phosphor-stats && pnpm install
 pnpm wrangler kv namespace create STATS_CACHE   # paste the id into wrangler.toml
 pnpm wrangler secret put GITHUB_TOKEN
-pnpm wrangler deploy
+pnpm deploy
 ```
 
-## Known limitations
+**→ [docs/self-hosting.md](docs/self-hosting.md)** for the full walkthrough:
+tokens, KV, rate limiting, continuous deployment and monitoring.
 
-- **GitHub caches the image.** READMEs are served through Camo, GitHub's image
-  proxy. It respects `Cache-Control` but can keep serving an older copy for a
-  while after it expires. A card that has not caught up yet is expected
-  behaviour, not a bug — and if you self-host you can
-  [purge it on every push](docs/purging.md).
-- **Streaks are computed in UTC.** A day boundary has to be drawn somewhere, and
-  a Worker runs in whichever data centre is closest to the reader — anything
-  derived from local time would give a different answer per continent. If you
-  live far from UTC your streak may tick over at an unfamiliar hour.
-- **A zero on today does not break your streak.** The day is not over yet. The
-  streak only ends once yesterday is also empty.
-- **Public repositories only,** and forks are excluded from the language totals
-  so that forking a large project does not rewrite your breakdown.
-- **Languages are sampled**, not exhaustive: the 300 most recently pushed
-  repositories are scanned. Beyond that the percentages do not move visibly, and
-  the quota is better spent elsewhere.
-- **The hourly quota is shared** on the public instance. When it runs low the
-  service starts serving slightly stale cards rather than failing.
+Your own instance can also keep cards current, which the public one cannot do on
+your behalf:
 
-## Keeping a card current
+- `POST /purge?username=<login>` drops a cached profile so the next view
+  refetches. There is a GitHub Action that calls it on every push.
+- `WARM_USERS` refreshes up to ten profiles every fifteen minutes, so those cards
+  never wait on a cache miss.
 
-A commit and the card showing it are separated by two caches: the 30 minutes
-Camo is told to hold the image, and the six hours the service holds your
-figures. The second is the expensive one — every lapse costs GitHub API calls
-from a budget the whole instance shares — so instead of shortening it for
-everybody there is a way to invalidate one profile:
+**→ [docs/purging.md](docs/purging.md)**, which also sets out how fresh a card
+can honestly be.
 
-```
-POST /purge?username=<login>
-Authorization: Bearer <PURGE_TOKEN>
-```
-
-It deletes and returns JSON; the next view of the card does the fetching. Fifty
-pushes in ten minutes are fifty cheap deletes and one API call.
-
-On your own instance you can also set `WARM_USERS` and have a cron trigger
-refresh up to ten profiles every fifteen minutes, so those cards never meet a
-miss at all.
-
-Both need the instance's token, and **the public instance does not share its
-own** — a shared purge key would let anybody drain its quota. If you want this,
-[self-host](docs/self-hosting.md) and follow
-[docs/purging.md](docs/purging.md), which covers both, includes a GitHub Action
-that purges on every push, and is honest about the floor: **a card embedded in a
-README can be about half an hour fresh, not instant.** GitHub's image proxy
-holds its own copy and cannot be invalidated from outside, so that last stretch
-is not ours to shorten.
+---
 
 ## Contributing
 
@@ -246,13 +262,11 @@ working around something, and several were written the obvious way first and
 corrected once a test proved the obvious way was wrong.
 
 - [docs/decisions.md](docs/decisions.md) — why things are the way they are.
-- [docs/limits.md](docs/limits.md) — the quota arithmetic, and where it stops
-  scaling. The ceiling is KV writes, not the GitHub quota.
+- [docs/limits.md](docs/limits.md) — the quota arithmetic. The ceiling is KV
+  writes, not the GitHub quota.
 - [docs/pending.md](docs/pending.md) — what is missing, in priority order.
 
 ## Licence
 
-[MIT](LICENSE).
-
-Icons are from [Tabler Icons](https://github.com/tabler/tabler-icons), also MIT
-licensed, embedded as paths rather than loaded at runtime.
+[MIT](LICENSE). Icons from [Tabler Icons](https://github.com/tabler/tabler-icons),
+also MIT, embedded as paths rather than loaded at runtime.
