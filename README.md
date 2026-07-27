@@ -221,11 +221,18 @@ Authorization: Bearer <PURGE_TOKEN>
 It deletes and returns JSON; the next view of the card does the fetching. Fifty
 pushes in ten minutes are fifty cheap deletes and one API call.
 
-This needs the instance's token, and **the public instance does not share
-its own** — a shared purge key would let anybody drain its quota. If you want it,
+On your own instance you can also set `WARM_USERS` and have a cron trigger
+refresh up to ten profiles every fifteen minutes, so those cards never meet a
+miss at all.
+
+Both need the instance's token, and **the public instance does not share its
+own** — a shared purge key would let anybody drain its quota. If you want this,
 [self-host](docs/self-hosting.md) and follow
-[docs/purging.md](docs/purging.md), which includes a GitHub Action that purges on
-every push.
+[docs/purging.md](docs/purging.md), which covers both, includes a GitHub Action
+that purges on every push, and is honest about the floor: **a card embedded in a
+README can be about half an hour fresh, not instant.** GitHub's image proxy
+holds its own copy and cannot be invalidated from outside, so that last stretch
+is not ours to shorten.
 
 ## Contributing
 

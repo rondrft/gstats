@@ -9,6 +9,12 @@ compatibility_date = "2026-07-01"
 [observability]
 enabled = true
 
+# Cache warming. Fires every fifteen minutes and returns immediately unless
+# WARM_USERS names somebody, so an instance that did not ask for it pays one
+# no-op invocation per interval and makes no requests and no writes.
+[triggers]
+crons = ["*/15 * * * *"]
+
 # Cached GitHub responses. Create with:
 #   wrangler kv namespace create STATS_CACHE
 #   wrangler kv namespace create STATS_CACHE --preview
@@ -43,6 +49,16 @@ SERVICE_VERSION = "dev-local"
 # src/cache.ts and spends the shared hourly quota. Raise this on a busy
 # instance with `--var CARD_MAX_AGE:3600`.
 CARD_MAX_AGE = "1800"
+
+# Logins to keep permanently warm, comma separated, at most ten. Every fifteen
+# minutes each one is refetched and written back to KV, so nobody visiting those
+# profiles ever waits on GitHub and the stored figures are never more than a
+# quarter of an hour old.
+#
+# Empty by default. Read docs/purging.md before adding more than a couple: the
+# GitHub cost is negligible but the KV writes are not, against a free plan that
+# allows a thousand a day.
+WARM_USERS = ""
 
 # Secrets, which must never appear here. Set them with:
 #   wrangler secret put GITHUB_TOKEN   # required

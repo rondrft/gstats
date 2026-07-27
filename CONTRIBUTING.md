@@ -35,6 +35,7 @@ src/
   params.ts         query string parsing, validation, sanitisation
   stats.ts          cache -> GitHub -> stale fallback
   purge.ts          POST /purge: auth, rate limit, targeted invalidation
+  warm.ts           the cron trigger: scheduled refresh of WARM_USERS
   streak.ts         streak arithmetic, pure and I/O free
   cache.ts          KV wrapper and cache key derivation
   i18n.ts           card copy and locale-aware formatting

@@ -59,14 +59,7 @@ export async function getStats(deps: StatsDeps, params: CardParams): Promise<Sta
   }
 
   try {
-    const data = await fetchStats(deps, params)
-    // Freshness is the cache's own policy, not the caller's: `cache_seconds`
-    // says how long a *client* may reuse the card, which is a separate lever.
-    const entry: CacheEntry = { data, freshUntil: deps.now + KV_FRESH_SECONDS * 1000 }
-    await Promise.all([
-      deps.cache.write(key, entry),
-      deps.rateLimits.write(deps.client.rateLimit, deps.now),
-    ])
+    const data = await fetchAndStore(deps, params, key)
     return { data, status: 'MISS' }
   } catch (error) {
     // Record the reading even on failure — a 403 carries the headers that tell
@@ -75,6 +68,33 @@ export async function getStats(deps: StatsDeps, params: CardParams): Promise<Sta
     if (cached !== null) return { data: cached.data, status: 'STALE' }
     throw error
   }
+}
+
+/**
+ * Fetches and replaces the entry regardless of whether one is already fresh.
+ *
+ * This is what the scheduled warmer runs. `getStats` would look at a fresh entry
+ * and correctly decide not to fetch, which is the opposite of the point: the
+ * warmer's whole job is to make the entry fresh again *before* a reader arrives.
+ *
+ * Throws on failure, and writes nothing when it does. That is the important
+ * half — the previous entry stays exactly where it was, because a figure from
+ * some hours ago is worth more to a reader than a miss they have to wait for.
+ */
+export async function refreshStats(deps: StatsDeps, params: CardParams): Promise<StatsData> {
+  return fetchAndStore(deps, params, cacheKey(params, deps.build))
+}
+
+async function fetchAndStore(deps: StatsDeps, params: CardParams, key: string): Promise<StatsData> {
+  const data = await fetchStats(deps, params)
+  // Freshness is the cache's own policy, not the caller's: `cache_seconds`
+  // says how long a *client* may reuse the card, which is a separate lever.
+  const entry: CacheEntry = { data, freshUntil: deps.now + KV_FRESH_SECONDS * 1000 }
+  await Promise.all([
+    deps.cache.write(key, entry),
+    deps.rateLimits.write(deps.client.rateLimit, deps.now),
+  ])
+  return data
 }
 
 /**

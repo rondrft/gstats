@@ -16,6 +16,7 @@ import { handlePurge, KvPurgeLimiter } from './purge'
 import { renderCard } from './render/cards'
 import { ERROR_CACHE_SECONDS, type ErrorCardKind, renderErrorCard } from './render/error-card'
 import { getStats } from './stats'
+import { KvWarmStore, parseWarmUsers, warmUsers } from './warm'
 
 export interface Env {
   STATS_CACHE: KVNamespace
@@ -39,6 +40,11 @@ export interface Env {
    * `wrangler deploy --var CARD_MAX_AGE:3600`, no code change involved.
    */
   CARD_MAX_AGE?: string
+  /**
+   * Comma-separated logins to keep warm on a timer, at most `MAX_WARM_USERS`.
+   * Absent means the scheduled handler does nothing at all.
+   */
+  WARM_USERS?: string
 }
 
 /** Used when nothing set a version, which in practice means local development. */
@@ -96,7 +102,29 @@ export default {
         return new Response('not found', { status: 404 })
     }
   },
+  /**
+   * Cron trigger. Does nothing unless `WARM_USERS` is set, so an instance that
+   * did not ask for warming pays one no-op invocation per interval and nothing
+   * else — no fetches, no writes.
+   */
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
+    ctx.waitUntil(warm(env))
+  },
 } satisfies ExportedHandler<Env>
+
+async function warm(env: Env): Promise<void> {
+  if (env.GITHUB_TOKEN === undefined || env.GITHUB_TOKEN.length === 0) return
+
+  const run = await warmUsers(env.WARM_USERS, {
+    client: new GitHubClient(new StaticTokenProvider(env.GITHUB_TOKEN)),
+    cache: new KvStatsCache(env.STATS_CACHE),
+    rateLimits: new KvRateLimitStore(env.STATS_CACHE),
+    now: Date.now(),
+    build: env.SERVICE_VERSION ?? UNKNOWN_VERSION,
+  })
+
+  if (run !== null) await new KvWarmStore(env.STATS_CACHE).write(run)
+}
 
 async function handleCard(url: URL, env: Env): Promise<Response> {
   const parsed = parseParams(url.searchParams)
@@ -185,14 +213,28 @@ function errorCard(
  * start serving stale cards.
  */
 async function handleHealth(env: Env): Promise<Response> {
-  const rateLimits = await new KvRateLimitStore(env.STATS_CACHE).read()
+  const [rateLimits, lastWarm] = await Promise.all([
+    new KvRateLimitStore(env.STATS_CACHE).read(),
+    new KvWarmStore(env.STATS_CACHE).read(),
+  ])
+
+  const configured = parseWarmUsers(env.WARM_USERS)
 
   return Response.json(
     {
       status: 'ok',
       version: env.SERVICE_VERSION ?? UNKNOWN_VERSION,
       tokenConfigured: env.GITHUB_TOKEN !== undefined && env.GITHUB_TOKEN.length > 0,
+      purgeEnabled: env.PURGE_TOKEN !== undefined && env.PURGE_TOKEN.length > 0,
       rateLimit: rateLimits ?? null,
+      // A cron that has stopped firing looks identical to one that is working
+      // until somebody checks when it last did. Reporting the timestamp and the
+      // outcome is what makes that visible without reading logs.
+      warming: {
+        configured: configured.users,
+        ignored: configured.skipped,
+        lastRun: lastWarm,
+      },
     },
     { headers: { 'cache-control': 'no-store' } },
   )

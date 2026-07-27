@@ -61,11 +61,13 @@ function recentWeeks() {
   ]
 }
 
-function defaultPayload(kind: QueryKind, query: string): unknown {
+function defaultPayload(kind: QueryKind, query: string, login: string): unknown {
   if (kind === 'bootstrap') {
     return {
       user: {
-        login: 'rondrft',
+        // Echo the requested login. A stub that answers with one fixed name
+        // however it is asked would hide a whole class of mix-up.
+        login,
         name: 'Ron',
         createdAt: '2019-04-11T09:30:00Z',
         contributionsCollection: {
@@ -125,7 +127,9 @@ export function stubGitHub(options: StubOptions = {}): GitHubStub {
     }
     const kind = classify(body.query)
     const override = options.respond?.(kind, body.variables)
-    const payload = override ?? { data: defaultPayload(kind, body.query) }
+    const payload = override ?? {
+      data: defaultPayload(kind, body.query, String(body.variables.login ?? 'rondrft')),
+    }
 
     return new Response(JSON.stringify(override === undefined ? payload : override), {
       status: options.status ?? 200,

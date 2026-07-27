@@ -87,6 +87,111 @@ A push does not make the card update — it makes the *next view* of the card
 update. If you want to see it yourself straight away, open the `/api` URL
 directly; the copy in your README is Camo's and will catch up within `max-age`.
 
+## Warming a few profiles automatically
+
+If the profiles you care about are yours and there are only a handful, you can
+skip the workflow entirely. Set `WARM_USERS` and the Worker refreshes them on a
+timer:
+
+```bash
+wrangler deploy \
+  --var SERVICE_VERSION:$(git rev-parse --short HEAD) \
+  --var WARM_USERS:octocat,defunkt
+```
+
+Every fifteen minutes it fetches each of those profiles and writes the result
+back to KV. Two consequences follow: nobody visiting those cards ever waits on a
+cache miss, and the stored figures are never more than fifteen minutes old.
+
+It **refreshes**, it does not purge. Purging on a timer would guarantee the
+opposite of the point — every quarter of an hour, the first person to load each
+warmed card would be the one waiting for GitHub.
+
+Details worth knowing:
+
+- **Off unless you set it.** With `WARM_USERS` empty the scheduled handler
+  returns immediately: no requests, no writes, no record.
+- **Ten profiles at most.** This is a convenience for whoever runs the instance,
+  not a subscription service.
+- **One at a time, with a pause.** Ten profiles firing together would be exactly
+  the spike against the shared quota that everything else here avoids.
+- **A failure is skipped, never destructive.** If GitHub is down for one
+  profile, that profile's existing entry is left alone and the run moves on. A
+  figure from some hours ago beats a miss.
+- **Only the default parameters are warmed.** A profile has one cache entry per
+  combination of the inputs that change what is fetched, so a card using
+  `langs_count=8` or `lang_mode=repos` is not covered and its first reader still
+  pays for a miss. That is the ordinary behaviour, not a fault.
+
+`/health` reports what is configured and how the last run went, which is the only
+way to notice a cron that has quietly stopped:
+
+```json
+{
+  "warming": {
+    "configured": ["octocat", "defunkt"],
+    "ignored": [],
+    "lastRun": {
+      "ranAt": 1785110400000,
+      "durationMs": 2140,
+      "refreshed": ["octocat", "defunkt"],
+      "failed": [],
+      "skipped": []
+    }
+  }
+}
+```
+
+`ignored` holds anything in `WARM_USERS` that is not a GitHub login. A stray
+comma is otherwise invisible — the only symptom is one profile silently never
+warming, which nobody traces back to the variable.
+
+### What it costs
+
+Per warmed profile, per day:
+
+| | Amount | Against |
+| --- | --- | --- |
+| Runs | 96 | — |
+| GitHub calls | ~300 | 5,000 **per hour** |
+| KV writes | 96 | 1,000 **per day** on the free plan |
+
+The GitHub side is nothing: 300 calls a day against a budget that refills to
+5,000 every hour. The KV side is the one to watch, because that quota is daily
+and much smaller. Ten profiles is 960 writes, plus one per run for the status
+record — right at the free plan's ceiling, and that is before any cache miss
+from an ordinary visitor writes anything.
+
+So: one or two profiles is free in practice. Ten is a decision to make
+deliberately, and on the free plan it is effectively the whole day's write
+budget. Cloudflare's paid Workers plan raises the limit well past this.
+
+## How fresh can a card actually be
+
+Worth being precise about, because the answer is not "instant" and no amount of
+configuration makes it so.
+
+| Stage | Delay it adds | Who controls it |
+| --- | --- | --- |
+| Your commit → our stored figures | up to 15 min with warming, up to 6 h without, 0 with a purge | this service |
+| Our figures → the image in a README | up to `max-age`, 30 min by default | **Camo** |
+
+The floor is set by the second row, and it is not ours. GitHub serves README
+images through its own proxy, which holds a copy for as long as `Cache-Control`
+permits and gives no way to invalidate it from outside. Warming and purging both
+act on the first row only.
+
+Lowering `max-age` shortens the second row, but the cost grows linearly in
+Worker invocations while the benefit does not — the reader still waits for
+whatever fraction of the interval they happened to arrive in. Below 30 minutes
+it stops being worth it.
+
+**So: about half an hour is achievable for a card embedded in a README. "Almost
+instant" is not, for anybody, and a project promising it is measuring something
+other than what a visitor sees.** Opening the `/api` URL directly bypasses Camo
+and shows the current figures immediately, which is the right way to check that
+a purge or a warm actually worked.
+
 ## Why not just shorten the cache
 
 Because the two caches cost different things.

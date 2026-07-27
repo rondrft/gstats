@@ -91,6 +91,23 @@ wrangler secret put PURGE_TOKEN     # any long random string
 Without it, `POST /purge` answers `503` and the endpoint does nothing. See
 [docs/purging.md](purging.md) for the workflow that calls it on every push.
 
+### Optional: keep a few profiles warm
+
+For up to ten profiles you can skip the manual endpoint entirely. Set
+`WARM_USERS` and a cron trigger refreshes them every fifteen minutes, so nobody
+visiting those cards ever waits on a cache miss:
+
+```bash
+pnpm wrangler deploy \
+  --var SERVICE_VERSION:$(git rev-parse --short HEAD) \
+  --var WARM_USERS:YOUR_LOGIN
+```
+
+Empty by default, and the handler does nothing at all when it is. Read the
+[cost table](purging.md#what-it-costs) before adding more than a couple: the
+GitHub calls are negligible but the KV writes are not, against a free plan that
+allows a thousand a day.
+
 ## 6. Deploy
 
 ```bash
