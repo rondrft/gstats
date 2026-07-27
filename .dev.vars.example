@@ -1,0 +1,7 @@
+# Copy to `.dev.vars` for local development with `wrangler dev`.
+# `.dev.vars` is gitignored. In production this value is set with
+# `wrangler secret put GITHUB_TOKEN` and never lives in the repo.
+#
+# A classic PAT with no scopes at all is enough: every field the service reads
+# is public. Do not grant `repo`.
+GITHUB_TOKEN=ghp_replace_me

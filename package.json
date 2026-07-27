@@ -1,0 +1,29 @@
+{
+  "name": "phosphor-stats",
+  "version": "1.0.0",
+  "private": true,
+  "description": "GitHub stats cards rendered as SVG on the edge, in a CRT phosphor palette.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.10.0",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.5.5",
+    "@cloudflare/vitest-pool-workers": "^0.18.8",
+    "@cloudflare/workers-types": "^5.20260727.1",
+    "typescript": "^5.9.3",
+    "vitest": "~4.1.10",
+    "wrangler": "^4.114.0"
+  }
+}

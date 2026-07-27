@@ -1,0 +1,5 @@
+# esbuild and workerd ship prebuilt binaries and need their install scripts to
+# run. Both arrive as transitive dependencies of the Cloudflare toolchain.
+allowBuilds:
+  esbuild: true
+  workerd: true

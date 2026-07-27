@@ -1,0 +1,27 @@
+name = "phosphor-stats"
+main = "src/index.ts"
+compatibility_date = "2026-07-01"
+
+# `nodejs_compat` is deliberately NOT enabled. The Worker has zero runtime
+# dependencies and uses only Web Platform APIs, which keeps the bundle small
+# and the cold path predictable.
+
+[observability]
+enabled = true
+
+# Cached GitHub responses. Create with:
+#   wrangler kv namespace create STATS_CACHE
+#   wrangler kv namespace create STATS_CACHE --preview
+# then paste the returned ids below. The ids are not secrets.
+[[kv_namespaces]]
+binding = "STATS_CACHE"
+id = "0000000000000000000000000000000f"
+preview_id = "0000000000000000000000000000000f"
+
+[vars]
+# Surfaced by /health so a deployed instance can be identified at a glance.
+# Bump alongside the package.json version.
+SERVICE_VERSION = "1.0.0"
+
+# GITHUB_TOKEN is a secret and must never appear here. Set it with:
+#   wrangler secret put GITHUB_TOKEN
