@@ -79,6 +79,18 @@ the repository, in `wrangler.toml`, or in any log.
 For local development, copy `.dev.vars.example` to `.dev.vars` and put the token
 there instead. That file is gitignored.
 
+### Optional: a purge token
+
+Set one if you want to be able to invalidate a card on demand, which is how you
+get a figure to appear sooner than the six hours the cache holds it:
+
+```bash
+wrangler secret put PURGE_TOKEN     # any long random string
+```
+
+Without it, `POST /purge` answers `503` and the endpoint does nothing. See
+[docs/purging.md](purging.md) for the workflow that calls it on every push.
+
 ## 6. Deploy
 
 ```bash
@@ -136,6 +148,10 @@ on the Worker's hostname — something like 60 requests per minute per IP is
 generous for real README traffic and stops a scraper from draining an hour of
 quota in a minute.
 
+**Scope the rule to the `/api` path**, not to the whole hostname. `/purge`
+carries its own per-token limit and is meant to be called by your CI; an IP rule
+covering it would throttle your own workflow for no benefit.
+
 Cache hits never touch GitHub, so the effective limit is much higher than it
 looks.
 
@@ -189,8 +205,16 @@ rate limit window:
 quickest way to tell whether the instance is running what you think it is.
 
 If `remaining` regularly approaches zero, the instance is serving more distinct
-profiles than one token can support. Raise `cache_seconds` on the busiest cards
-first; if that is not enough, the next step is a GitHub App, where every
+profiles than one token can support. That number is driven by how long KV counts
+an entry fresh — six hours, in `src/cache.ts` — and not by the card's `max-age`,
+which is answered from KV and costs no quota at all. If instead it is Worker
+invocations that are climbing, raise `CARD_MAX_AGE`:
+
+```bash
+wrangler deploy --var SERVICE_VERSION:$(git rev-parse --short HEAD) --var CARD_MAX_AGE:3600
+```
+
+If the GitHub quota itself is the problem, the next step is a GitHub App, where every
 installation carries its own 5,000 per hour. The codebase is ready for it —
 authentication is isolated behind the `TokenProvider` interface in
 `src/github/client.ts`, and swapping it out means adding one implementation and

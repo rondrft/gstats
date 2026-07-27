@@ -34,5 +34,16 @@ preview_id = "57d7366d6d83441abf4cadd1344d2e2c"
 # meaning of a stored field changes.
 SERVICE_VERSION = "dev-local"
 
-# GITHUB_TOKEN is a secret and must never appear here. Set it with:
-#   wrangler secret put GITHUB_TOKEN
+# How long a client may reuse a rendered card, in seconds. Clamped to 1800-86400.
+#
+# This is not the same lever as how long the service holds your figures, and
+# they cost different things. A revalidation arriving after this lapses is
+# answered from KV without touching GitHub, so lowering it spends Worker
+# invocations; how often GitHub is asked is set by KV_FRESH_SECONDS in
+# src/cache.ts and spends the shared hourly quota. Raise this on a busy
+# instance with `--var CARD_MAX_AGE:3600`.
+CARD_MAX_AGE = "1800"
+
+# Secrets, which must never appear here. Set them with:
+#   wrangler secret put GITHUB_TOKEN   # required
+#   wrangler secret put PURGE_TOKEN    # optional, enables POST /purge

@@ -1,6 +1,8 @@
 import { env } from 'cloudflare:test'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { KV_FRESH_SECONDS } from '../src/cache'
 import worker, { type Env } from '../src/index'
+import { PURGE_LIMIT_PER_MINUTE } from '../src/purge'
 import { fixtureDay, stubGitHub } from './helpers/github-stub'
 
 const testEnv = env as unknown as Env
@@ -147,7 +149,7 @@ describe('cards', () => {
     expect(response.headers.get('x-cache')).toBe('MISS')
     expect(response.headers.get('content-type')).toBe('image/svg+xml; charset=utf-8')
     expect(response.headers.get('cache-control')).toBe(
-      'public, max-age=7200, s-maxage=7200, stale-while-revalidate=86400',
+      'public, max-age=1800, s-maxage=1800, stale-while-revalidate=86400',
     )
     expect(body.startsWith('<svg')).toBe(true)
     expect(body).toContain('contributions')
@@ -253,5 +255,230 @@ describe('cards', () => {
     expect(body).toContain('current streak')
     expect(body).toContain('>6<')
     expect(body).toContain(expected)
+  })
+})
+
+/**
+ * A reader used to wait for both caches in series — up to four hours between a
+ * commit and a card. They are separate levers and are now set separately: the
+ * response expires quickly so Camo comes back often, and KV stays fresh for
+ * hours so those returns cost nothing upstream.
+ */
+describe('the two caches are independent', () => {
+  it('serves a card that expires long before its data does', async () => {
+    stubGitHub()
+
+    const response = await get('/api?username=layered')
+    const maxAge = Number(/max-age=(\d+)/.exec(response.headers.get('cache-control') ?? '')?.[1])
+
+    expect(maxAge).toBe(1800)
+    expect(KV_FRESH_SECONDS).toBeGreaterThan(maxAge)
+  })
+
+  /**
+   * The acceptance test for the whole arrangement: once `max-age` lapses, Camo
+   * asks again, and that revalidation must not reach GitHub.
+   */
+  it('answers a revalidation from KV without calling GitHub', async () => {
+    const github = stubGitHub()
+
+    await get('/api?username=revalidated')
+    const callsAfterFirst = github.calls
+    expect(callsAfterFirst).toBeGreaterThan(0)
+
+    // Camo returning after max-age lapsed is just another request; the entry it
+    // meets is still well inside its six hours.
+    for (let revalidation = 0; revalidation < 5; revalidation += 1) {
+      const response = await get('/api?username=revalidated')
+      expect(response.headers.get('x-cache')).toBe('HIT')
+    }
+
+    expect(github.calls).toBe(callsAfterFirst)
+  })
+
+  it('lets an instance raise max-age without a code change', async () => {
+    stubGitHub()
+
+    const response = await worker.fetch(
+      new Request('https://stats.example.com/api?username=configured'),
+      { ...testEnv, CARD_MAX_AGE: '3600' },
+    )
+
+    expect(response.headers.get('cache-control')).toContain('max-age=3600')
+  })
+
+  it('clamps a configured value into the range the floor protects', async () => {
+    stubGitHub()
+
+    const tooLow = await worker.fetch(
+      new Request('https://stats.example.com/api?username=clamped'),
+      { ...testEnv, CARD_MAX_AGE: '5' },
+    )
+
+    expect(tooLow.headers.get('cache-control')).toContain('max-age=1800')
+  })
+
+  it('still honours a per-card override', async () => {
+    stubGitHub()
+
+    const response = await get('/api?username=overridden&cache_seconds=7200')
+
+    expect(response.headers.get('cache-control')).toContain('max-age=7200')
+  })
+})
+
+describe('POST /purge', () => {
+  const purge = (query: string, headers: Record<string, string> = {}) =>
+    worker.fetch(
+      new Request(`https://stats.example.com/purge?${query}`, { method: 'POST', headers }),
+      { ...testEnv, PURGE_TOKEN: 's3cret' },
+    )
+
+  const authorised = { authorization: 'Bearer s3cret' }
+
+  it('refuses a request with no token', async () => {
+    const response = await purge('username=octocat')
+
+    expect(response.status).toBe(401)
+    expect(response.headers.get('content-type')).toContain('application/json')
+  })
+
+  it('refuses a wrong token, and a malformed header', async () => {
+    for (const header of [
+      { authorization: 'Bearer wrong' },
+      { authorization: 's3cret' },
+      { authorization: 'Basic s3cret' },
+      { authorization: 'Bearer ' },
+    ]) {
+      expect((await purge('username=octocat', header)).status).toBe(401)
+    }
+  })
+
+  /** Scripts call this, and a script cannot read an SVG. */
+  it('answers JSON, never a card', async () => {
+    const response = await purge('username=octocat', authorised)
+    const body = await response.text()
+
+    expect(response.headers.get('content-type')).toContain('application/json')
+    expect(body.startsWith('<svg')).toBe(false)
+    expect(JSON.parse(body)).toMatchObject({ username: 'octocat' })
+  })
+
+  it('rejects a username GitHub could not have issued', async () => {
+    expect((await purge('username=not%20a%20login', authorised)).status).toBe(400)
+    expect((await purge('', authorised)).status).toBe(400)
+  })
+
+  it('says so plainly when the instance has no purge token', async () => {
+    const response = await worker.fetch(
+      new Request('https://stats.example.com/purge?username=octocat', { method: 'POST' }),
+      testEnv,
+    )
+
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toMatchObject({
+      error: expect.stringContaining('PURGE_TOKEN'),
+    })
+  })
+
+  it('refuses anything but POST', async () => {
+    const response = await worker.fetch(
+      new Request('https://stats.example.com/purge?username=octocat'),
+      { ...testEnv, PURGE_TOKEN: 's3cret' },
+    )
+
+    expect(response.status).toBe(405)
+    expect(response.headers.get('allow')).toBe('POST')
+  })
+
+  /** The behaviour the endpoint exists for. */
+  it('makes the next request a miss, and only the next one', async () => {
+    const github = stubGitHub()
+
+    const first = await get('/api?username=purged')
+    const cached = await get('/api?username=purged')
+    const callsBeforePurge = github.calls
+
+    const purgeResponse = await purge('username=purged', authorised)
+    const after = await get('/api?username=purged')
+    const afterThat = await get('/api?username=purged')
+
+    expect(first.headers.get('x-cache')).toBe('MISS')
+    expect(cached.headers.get('x-cache')).toBe('HIT')
+    expect(purgeResponse.status).toBe(200)
+    await expect(purgeResponse.json()).resolves.toMatchObject({ purged: 1 })
+
+    expect(after.headers.get('x-cache')).toBe('MISS')
+    expect(afterThat.headers.get('x-cache')).toBe('HIT')
+    expect(github.calls).toBeGreaterThan(callsBeforePurge)
+  })
+
+  /**
+   * A login has one entry per combination of the parameters that shape what is
+   * fetched, so purging has to clear all of them or the reader still sees an
+   * old card at whichever URL they actually used.
+   */
+  it('clears every variant of a login, not just one', async () => {
+    stubGitHub()
+
+    await get('/api?username=variants')
+    await get('/api?username=variants&langs_count=8')
+    await get('/api?username=variants&hide=langs')
+
+    const response = await purge('username=variants', authorised)
+
+    await expect(response.json()).resolves.toMatchObject({ purged: 3 })
+  })
+
+  it('leaves other logins alone', async () => {
+    stubGitHub()
+
+    await get('/api?username=keeper')
+    await purge('username=someoneelse', authorised)
+
+    expect((await get('/api?username=keeper')).headers.get('x-cache')).toBe('HIT')
+  })
+
+  it('reports nothing purged when there was nothing cached', async () => {
+    const response = await purge('username=neverseen', authorised)
+
+    await expect(response.json()).resolves.toMatchObject({ purged: 0 })
+  })
+
+  it('does not call GitHub — the next reader pays for that', async () => {
+    const github = stubGitHub()
+
+    await get('/api?username=nofetch')
+    const callsAfterFirst = github.calls
+    await purge('username=nofetch', authorised)
+
+    expect(github.calls).toBe(callsAfterFirst)
+  })
+
+  /**
+   * Its own token, because the counter is per token and the suite shares one
+   * KV namespace — an allowance already spent by the tests above would make
+   * this measure the leftovers instead of the limit.
+   */
+  it('brakes a runaway caller at ten a minute', async () => {
+    const token = 'runaway-token'
+    const hammer = () =>
+      worker.fetch(
+        new Request('https://stats.example.com/purge?username=hammered', {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}` },
+        }),
+        { ...testEnv, PURGE_TOKEN: token },
+      )
+
+    const statuses: number[] = []
+    for (let attempt = 0; attempt < 13; attempt += 1) {
+      statuses.push((await hammer()).status)
+    }
+
+    expect(statuses.filter((status) => status === 200)).toHaveLength(PURGE_LIMIT_PER_MINUTE)
+    expect(statuses.filter((status) => status === 429).length).toBeGreaterThan(0)
+    // The refusals come after the allowance, not interleaved with it.
+    expect(statuses.slice(0, PURGE_LIMIT_PER_MINUTE).every((status) => status === 200)).toBe(true)
   })
 })

@@ -13,7 +13,7 @@
  */
 
 import type { KvRateLimitStore } from './cache'
-import { type CacheEntry, cacheKey, isFresh, type StatsCache } from './cache'
+import { type CacheEntry, cacheKey, isFresh, KV_FRESH_SECONDS, type StatsCache } from './cache'
 import type { GitHubClient } from './github/client'
 import { compactCalendar, fetchContributions } from './github/contributions'
 import { fetchLanguages } from './github/languages'
@@ -60,9 +60,11 @@ export async function getStats(deps: StatsDeps, params: CardParams): Promise<Sta
 
   try {
     const data = await fetchStats(deps, params)
-    const entry: CacheEntry = { data, freshUntil: deps.now + params.cacheSeconds * 1000 }
+    // Freshness is the cache's own policy, not the caller's: `cache_seconds`
+    // says how long a *client* may reuse the card, which is a separate lever.
+    const entry: CacheEntry = { data, freshUntil: deps.now + KV_FRESH_SECONDS * 1000 }
     await Promise.all([
-      deps.cache.write(key, entry, params.cacheSeconds),
+      deps.cache.write(key, entry),
       deps.rateLimits.write(deps.client.rateLimit, deps.now),
     ])
     return { data, status: 'MISS' }

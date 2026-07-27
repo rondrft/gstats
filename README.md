@@ -156,7 +156,7 @@ language's own colour:
 | `animate` | bool | `true` | Draw-on animation for the rings. |
 | `locale` | string | `en` | Label language: `en` or `es`. |
 | `show_credit` | bool | `false` | Adds a small project credit to the card. |
-| `cache_seconds` | 1800–86400 | `7200` | How long the card may be cached. |
+| `cache_seconds` | 1800–86400 | instance default | How long a client may reuse the card. |
 
 Colours are accepted with or without a leading `#`, in 3, 4, 6 or 8 digits.
 Anything that fails validation falls back to the theme rather than breaking the
@@ -189,7 +189,8 @@ pnpm wrangler deploy
 - **GitHub caches the image.** READMEs are served through Camo, GitHub's image
   proxy. It respects `Cache-Control` but can keep serving an older copy for a
   while after it expires. A card that has not caught up yet is expected
-  behaviour, not a bug.
+  behaviour, not a bug — and if you self-host you can
+  [purge it on every push](docs/purging.md).
 - **Streaks are computed in UTC.** A day boundary has to be drawn somewhere, and
   a Worker runs in whichever data centre is closest to the reader — anything
   derived from local time would give a different answer per continent. If you
@@ -203,6 +204,28 @@ pnpm wrangler deploy
   the quota is better spent elsewhere.
 - **The hourly quota is shared** on the public instance. When it runs low the
   service starts serving slightly stale cards rather than failing.
+
+## Keeping a card current
+
+A commit and the card showing it are separated by two caches: the 30 minutes
+Camo is told to hold the image, and the six hours the service holds your
+figures. The second is the expensive one — every lapse costs GitHub API calls
+from a budget the whole instance shares — so instead of shortening it for
+everybody there is a way to invalidate one profile:
+
+```
+POST /purge?username=<login>
+Authorization: Bearer <PURGE_TOKEN>
+```
+
+It deletes and returns JSON; the next view of the card does the fetching. Fifty
+pushes in ten minutes are fifty cheap deletes and one API call.
+
+This needs the instance's token, and **the public instance does not share
+its own** — a shared purge key would let anybody drain its quota. If you want it,
+[self-host](docs/self-hosting.md) and follow
+[docs/purging.md](docs/purging.md), which includes a GitHub Action that purges on
+every push.
 
 ## Contributing
 

@@ -112,14 +112,17 @@ describe('numeric parameters', () => {
     expect(parseOk('username=x&radius=-5').style.radius).toBe(0)
     expect(parseOk('username=x&langs_count=99').langsCount).toBe(8)
     expect(parseOk('username=x&langs_count=0').langsCount).toBe(1)
-    expect(parseOk('username=x&cache_seconds=1').cacheSeconds).toBe(1800)
-    expect(parseOk('username=x&cache_seconds=999999').cacheSeconds).toBe(86400)
+    expect(parseOk('username=x&cache_seconds=1').maxAgeOverride).toBe(1800)
+    expect(parseOk('username=x&cache_seconds=999999').maxAgeOverride).toBe(86400)
   })
 
   it('falls back to the default when the value is not a number', () => {
     expect(parseOk('username=x&radius=nope').style.radius).toBe(DEFAULTS.radius)
     expect(parseOk('username=x&langs_count=').langsCount).toBe(DEFAULTS.langsCount)
-    expect(parseOk('username=x&cache_seconds=NaN').cacheSeconds).toBe(DEFAULTS.cacheSeconds)
+    // An unreadable value leaves the instance default in charge rather than
+    // pinning the card to a number nobody asked for.
+    expect(parseOk('username=x&cache_seconds=NaN').maxAgeOverride).toBeNull()
+    expect(parseOk('username=x').maxAgeOverride).toBeNull()
   })
 })
 

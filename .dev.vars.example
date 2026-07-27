@@ -5,3 +5,7 @@
 # A classic PAT with no scopes at all is enough: every field the service reads
 # is public. Do not grant `repo`.
 GITHUB_TOKEN=ghp_replace_me
+
+# Optional. Enables POST /purge, which drops a login's cached entries so the
+# next view refetches. Without it the endpoint answers 503.
+PURGE_TOKEN=any-long-random-string

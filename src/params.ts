@@ -44,7 +44,6 @@ export const LANG_MODES = ['bytes', 'repos'] as const
 export const DEFAULTS = {
   radius: 6,
   langsCount: 4,
-  cacheSeconds: 7200,
   scanlines: true,
   animate: true,
   showCredit: false,
@@ -57,10 +56,14 @@ export const LIMITS = {
   radius: { min: 0, max: 24 },
   langsCount: { min: 1, max: 8 },
   /**
-   * The floor keeps a popular card from burning the shared hourly quota; the
-   * ceiling keeps a card from looking abandoned.
+   * How long a client may reuse the rendered card.
+   *
+   * The floor is not about quota — a revalidation is answered from KV and costs
+   * no GitHub calls — it is about Worker invocations, which grow linearly as it
+   * drops while the gain in propagation does not. Below 1800 the trade stops
+   * being worth making.
    */
-  cacheSeconds: { min: 1800, max: 86400 },
+  maxAge: { min: 1800, max: 86400 },
 } as const
 
 /** Inputs that change which bytes we ask GitHub for, or how they are ranked. */
@@ -96,7 +99,12 @@ export interface StyleParams {
 
 export interface CardParams extends DataParams {
   style: StyleParams
-  cacheSeconds: number
+  /**
+   * Per-card override of the response's `max-age`, or null to take the
+   * instance default. Kept out of the cache key: it changes what a client is
+   * told, never what is fetched or stored.
+   */
+  maxAgeOverride: number | null
 }
 
 export type ParseResult =
@@ -108,6 +116,18 @@ function clampInt(raw: string | null, fallback: number, min: number, max: number
   const value = Number.parseInt(raw, 10)
   if (!Number.isFinite(value)) return fallback
   return Math.min(max, Math.max(min, value))
+}
+
+/**
+ * A clamped integer, or null when the caller said nothing. Distinguishing
+ * "absent" from "the default" is what lets the instance move its own default
+ * without overriding a caller who asked for something specific.
+ */
+function optionalInt(raw: string | null, range: { min: number; max: number }): number | null {
+  if (raw === null) return null
+  const value = Number.parseInt(raw, 10)
+  if (!Number.isFinite(value)) return null
+  return Math.min(range.max, Math.max(range.min, value))
 }
 
 function parseBool(raw: string | null, fallback: boolean): boolean {
@@ -206,12 +226,7 @@ export function parseParams(query: URLSearchParams): ParseResult {
       langMode: oneOf(query.get('lang_mode'), LANG_MODES, DEFAULTS.langMode),
       hide: parseHidden(query.get('hide')),
       style,
-      cacheSeconds: clampInt(
-        query.get('cache_seconds'),
-        DEFAULTS.cacheSeconds,
-        LIMITS.cacheSeconds.min,
-        LIMITS.cacheSeconds.max,
-      ),
+      maxAgeOverride: optionalInt(query.get('cache_seconds'), LIMITS.maxAge),
     },
   }
 }

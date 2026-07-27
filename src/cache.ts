@@ -40,11 +40,30 @@ import type { DataParams } from './params'
 const SCHEMA_VERSION = 'v2'
 
 /**
- * How long an entry physically survives in KV beyond its logical freshness.
- * The gap is the window in which a rate-limited request can still serve
- * something rather than nothing.
+ * How long a KV entry counts as fresh.
+ *
+ * Deliberately much longer than the `max-age` the card is served with. Those
+ * two used to be the same number, and because they are in series a reader's
+ * wait for a new figure was the sum of both — up to four hours. They answer
+ * different questions:
+ *
+ *   `max-age` decides how often Camo comes back and asks. Shortening it costs
+ *   Worker invocations and nothing else, because the answer comes from KV.
+ *
+ *   This decides how often *we* ask GitHub. Shortening it costs quota from a
+ *   budget shared by every user of the instance, which is the scarce thing.
+ *
+ * So this stays long and `max-age` stays short. Anyone who needs a figure
+ * sooner than six hours purges the entry rather than making everybody pay.
  */
-const STALE_GRACE_SECONDS = 86_400
+export const KV_FRESH_SECONDS = 6 * 60 * 60
+
+/**
+ * How long an entry physically survives, well beyond its freshness. The gap is
+ * the window in which a rate-limited request can still answer with a stale card
+ * rather than an error.
+ */
+export const KV_EXPIRE_SECONDS = 7 * 24 * 60 * 60
 
 export interface CacheEntry {
   data: StatsData
@@ -54,7 +73,9 @@ export interface CacheEntry {
 
 export interface StatsCache {
   read(key: string): Promise<CacheEntry | null>
-  write(key: string, entry: CacheEntry, ttlSeconds: number): Promise<void>
+  write(key: string, entry: CacheEntry): Promise<void>
+  /** Removes every entry for a login. Returns how many were deleted. */
+  purge(prefix: string): Promise<number>
 }
 
 /**
@@ -75,6 +96,18 @@ export interface StatsCache {
  * so a release spends fresh GitHub quota proportional to how many distinct
  * profiles are active. On a busy instance that is the cost worth watching.
  */
+/**
+ * Everything cached for one login, under one build.
+ *
+ * A login does not have *an* entry: it has one per combination of the
+ * parameters that shape what is fetched, so purging has to work by prefix.
+ * Entries under other builds are unreachable from this one and are left for
+ * their own expiry.
+ */
+export function cachePrefix(username: string, build: string): string {
+  return `${SCHEMA_VERSION}:${build}:${username.toLowerCase()}:`
+}
+
 export function cacheKey(params: DataParams, build: string): string {
   const dataShape = [
     `l=${params.langsCount}`,
@@ -84,7 +117,7 @@ export function cacheKey(params: DataParams, build: string): string {
     `h=${[...params.hide].sort().join('|')}`,
   ].join(';')
 
-  return [SCHEMA_VERSION, build, params.username.toLowerCase(), fingerprint(dataShape)].join(':')
+  return cachePrefix(params.username, build) + fingerprint(dataShape)
 }
 
 /**
@@ -152,15 +185,38 @@ export class KvStatsCache implements StatsCache {
     }
   }
 
-  async write(key: string, entry: CacheEntry, ttlSeconds: number): Promise<void> {
+  async write(key: string, entry: CacheEntry): Promise<void> {
     try {
       await this.namespace.put(key, JSON.stringify(entry), {
-        expirationTtl: ttlSeconds + STALE_GRACE_SECONDS,
+        expirationTtl: KV_EXPIRE_SECONDS,
       })
     } catch {
       // Losing a write costs one extra upstream call; failing the request costs
       // the reader a broken image.
     }
+  }
+
+  /**
+   * Deletes every entry under a prefix.
+   *
+   * Unlike a read, a failure here is reported: the caller asked for something to
+   * be gone, and silently not doing it would leave them believing a stale card
+   * had been retired.
+   */
+  async purge(prefix: string): Promise<number> {
+    let deleted = 0
+    let cursor: string | undefined
+
+    do {
+      const listing: KVNamespaceListResult<unknown, string> = await this.namespace.list(
+        cursor === undefined ? { prefix } : { prefix, cursor },
+      )
+      await Promise.all(listing.keys.map((key) => this.namespace.delete(key.name)))
+      deleted += listing.keys.length
+      cursor = listing.list_complete ? undefined : listing.cursor
+    } while (cursor !== undefined)
+
+    return deleted
   }
 }
 
@@ -175,6 +231,12 @@ export class MemoryStatsCache implements StatsCache {
   write(key: string, entry: CacheEntry): Promise<void> {
     this.entries.set(key, entry)
     return Promise.resolve()
+  }
+
+  purge(prefix: string): Promise<number> {
+    const doomed = [...this.entries.keys()].filter((key) => key.startsWith(prefix))
+    for (const key of doomed) this.entries.delete(key)
+    return Promise.resolve(doomed.length)
   }
 }
 

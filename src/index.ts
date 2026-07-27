@@ -11,7 +11,8 @@ import { KvRateLimitStore, KvStatsCache } from './cache'
 import { GitHubClient, StaticTokenProvider } from './github/client'
 import { StatsError } from './github/types'
 import { landingPage } from './landing'
-import { parseParams, type StyleParams } from './params'
+import { LIMITS, parseParams, type StyleParams } from './params'
+import { handlePurge, KvPurgeLimiter } from './purge'
 import { renderCard } from './render/cards'
 import { ERROR_CACHE_SECONDS, type ErrorCardKind, renderErrorCard } from './render/error-card'
 import { getStats } from './stats'
@@ -27,6 +28,17 @@ export interface Env {
    * a clean one.
    */
   SERVICE_VERSION?: string
+  /**
+   * Shared secret for `POST /purge`. Set with `wrangler secret put PURGE_TOKEN`.
+   * Absent means purging is switched off on this instance.
+   */
+  PURGE_TOKEN?: string
+  /**
+   * Instance default for the card's `max-age`, in seconds. A plain variable
+   * rather than a constant so it can be raised on a busy instance with
+   * `wrangler deploy --var CARD_MAX_AGE:3600`, no code change involved.
+   */
+  CARD_MAX_AGE?: string
 }
 
 /** Used when nothing set a version, which in practice means local development. */
@@ -40,9 +52,34 @@ const SVG_CONTENT_TYPE = 'image/svg+xml; charset=utf-8'
  */
 const STALE_WHILE_REVALIDATE = 86_400
 
+/**
+ * Default `max-age`, overridable per instance by `CARD_MAX_AGE`.
+ *
+ * Short on purpose, and it does not cost GitHub quota: a revalidation arriving
+ * here is answered from KV, which stays fresh for hours. What it costs is
+ * Worker invocations, and those are what the floor in `LIMITS.maxAge` protects.
+ */
+const DEFAULT_MAX_AGE = 1800
+
+function resolveMaxAge(env: Env, override: number | null): number {
+  if (override !== null) return override
+  const configured = Number.parseInt(env.CARD_MAX_AGE ?? '', 10)
+  if (!Number.isFinite(configured)) return DEFAULT_MAX_AGE
+  return Math.min(LIMITS.maxAge.max, Math.max(LIMITS.maxAge.min, configured))
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
+
+    // Purging is the one thing here that changes state, so it is the one thing
+    // that is not a GET.
+    if (url.pathname === '/purge') {
+      if (request.method !== 'POST') {
+        return json({ error: 'use POST' }, 405, { allow: 'POST' })
+      }
+      return purge(request, url, env)
+    }
 
     if (request.method !== 'GET' && request.method !== 'HEAD') {
       return new Response('method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
@@ -88,7 +125,7 @@ async function handleCard(url: URL, env: Env): Promise<Response> {
       parsed.params,
     )
 
-    const maxAge = parsed.params.cacheSeconds
+    const maxAge = resolveMaxAge(env, parsed.params.maxAgeOverride)
     return new Response(renderCard(data, parsed.params), {
       headers: {
         'content-type': SVG_CONTENT_TYPE,
@@ -100,6 +137,28 @@ async function handleCard(url: URL, env: Env): Promise<Response> {
     const failure = error instanceof StatsError ? error : new StatsError('upstream', String(error))
     return errorCard(failure.kind, parsed.params.style, failure.retryAfterMinutes)
   }
+}
+
+/**
+ * Targeted invalidation, so that propagation does not have to be bought by
+ * shortening the cache for everybody. Answers JSON: this endpoint is called by
+ * scripts, and a script cannot read an SVG.
+ */
+async function purge(request: Request, url: URL, env: Env): Promise<Response> {
+  const outcome = await handlePurge({
+    authorization: request.headers.get('authorization'),
+    username: url.searchParams.get('username'),
+    secret: env.PURGE_TOKEN,
+    cache: new KvStatsCache(env.STATS_CACHE),
+    limiter: new KvPurgeLimiter(env.STATS_CACHE, Date.now()),
+    build: env.SERVICE_VERSION ?? UNKNOWN_VERSION,
+  })
+
+  return json(outcome.body, outcome.status)
+}
+
+function json(body: unknown, status: number, headers: Record<string, string> = {}): Response {
+  return Response.json(body, { status, headers: { 'cache-control': 'no-store', ...headers } })
 }
 
 /**

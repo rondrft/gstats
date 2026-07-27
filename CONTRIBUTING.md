@@ -34,6 +34,7 @@ src/
   index.ts          routing, response headers, the never-return-an-error rule
   params.ts         query string parsing, validation, sanitisation
   stats.ts          cache -> GitHub -> stale fallback
+  purge.ts          POST /purge: auth, rate limit, targeted invalidation
   streak.ts         streak arithmetic, pure and I/O free
   cache.ts          KV wrapper and cache key derivation
   i18n.ts           card copy and locale-aware formatting
@@ -102,6 +103,14 @@ changes the renderer takes effect on the next request, because nothing rendered
 was ever stored. What it cannot reach is the copy Camo and the reader's browser
 are already holding — that is governed by `Cache-Control`, not by KV, and it is
 the *only* reason a card can look stale after a deploy.
+
+**The two caches are separate levers.** `Cache-Control: max-age` decides how
+often Camo comes back; those returns are answered from KV and cost no GitHub
+quota, only Worker invocations. `KV_FRESH_SECONDS` decides how often the service
+asks GitHub, which spends the quota every profile on the instance shares. They
+used to be the same number, which made a reader wait for the sum of both. Keep
+them apart: short response, long data, and `POST /purge` for anyone who needs a
+figure sooner.
 
 **The cache key carries the build.** `SERVICE_VERSION` is part of the key, so a
 deploy starts from an empty cache and cannot read entries written against an
