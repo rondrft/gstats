@@ -135,10 +135,15 @@ Colours are accepted with or without a leading `#`, in 3, 4, 6 or 8 digits.
 Anything that fails validation falls back to the theme rather than breaking the
 card, and out-of-range numbers are clamped rather than rejected.
 
-The card never returns an error status. A username that does not exist, an
-exhausted rate limit or an upstream failure all render as a readable card with a
-`200` — a non-200 in a README shows up as a broken image and tells the reader
-nothing.
+The card renders every failure rather than signalling it. A username that does
+not exist, an exhausted GitHub quota or an upstream failure all come back as a
+readable card with a `200` — a non-200 in a README shows up as a broken image
+and tells the reader nothing.
+
+One exception: a client that goes over the instance's rate limit gets a `429`
+with `Retry-After`, because that answer is for whoever is making the requests
+rather than for a reader. It is still a drawn card, so it says what happened to
+anybody who opens it.
 
 </details>
 
@@ -203,6 +208,13 @@ fixable.
   repositories are scanned. Beyond that the percentages do not move visibly.
 - **The public instance is best effort.** One GitHub token shared by everyone
   using it, and nobody is on call for it.
+- **Requests are limited per address.** Thirty a minute, and twenty *distinct*
+  usernames an hour — a card in a README is one request every half hour, so
+  ordinary use never approaches either. Reloading the same profile is free once
+  it has been counted; walking a list of usernames is what the second limit is
+  for. Over the line gets a card that says `too many requests` and a
+  `Retry-After`. A [self-hosted instance](docs/self-hosting.md#7-protect-your-quota)
+  sets its own numbers.
 
 ### Private repositories
 

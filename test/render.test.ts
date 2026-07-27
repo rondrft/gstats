@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { LOCALE_NAMES } from '../src/i18n'
 import { renderCard } from '../src/render/cards'
 import { renderErrorCard } from '../src/render/error-card'
 import { CARD_HEIGHT } from '../src/render/layout'
@@ -321,6 +322,50 @@ describe('error card', () => {
     expect(renderErrorCard({ kind: 'rate-limited', style, retryAfterMinutes: 12 })).toContain(
       'rate limited, retry in 12m',
     )
+    expect(renderErrorCard({ kind: 'too-many-requests', style, retryAfterMinutes: 1 })).toContain(
+      'too many requests, wait 1m',
+    )
+  })
+
+  /**
+   * The two are easy to conflate and mean opposite things to whoever reads the
+   * card: one is a shared quota nobody can do anything about, the other is the
+   * caller's own traffic and is theirs to fix.
+   */
+  it('distinguishes our limit from GitHub’s', () => {
+    const ours = renderErrorCard({ kind: 'too-many-requests', style, retryAfterMinutes: 1 })
+    const theirs = renderErrorCard({ kind: 'rate-limited', style, retryAfterMinutes: 1 })
+
+    expect(ours).not.toBe(theirs)
+  })
+
+  /**
+   * The card's width is set by the longest line any locale can produce. A new
+   * message that overflows the frame would not fail any other assertion.
+   */
+  it('fits every message inside the frame in every locale', () => {
+    const kinds = [
+      'not-found',
+      'missing-username',
+      'not-configured',
+      'rate-limited',
+      'too-many-requests',
+      'upstream',
+    ] as const
+
+    for (const locale of LOCALE_NAMES) {
+      const localised = paramsFixture(`username=x&locale=${locale}`).style
+      for (const kind of kinds) {
+        const svg = renderErrorCard({ kind, style: localised, retryAfterMinutes: 60 })
+        const message = /<title>([^<]*)<\/title>/.exec(svg)?.[1] ?? ''
+
+        expect(message.length, `${locale}/${kind}`).toBeGreaterThan(0)
+        expect(message, `${locale}/${kind}`).not.toContain('{')
+        // Text starts at x=105 in a 400-wide card, at font-size 11 in a
+        // monospace stack whose advance is about 0.6em.
+        expect(105 + message.length * 6.6, `${locale}/${kind}`).toBeLessThan(400)
+      }
+    }
   })
 
   it('keeps the theme of the request that failed', () => {

@@ -43,6 +43,23 @@ describe('routing', () => {
     expect(body.status).toBe('ok')
     expect(body.tokenConfigured).toBe(true)
     expect(body).toHaveProperty('rateLimit')
+    expect(body).toHaveProperty('writes')
+  })
+
+  /**
+   * An instance with no binding declared serves every request unthrottled.
+   * That is a legitimate way to run a private one and a reckless way to run a
+   * public one, so the absence is stated rather than left to be inferred.
+   */
+  it('says so at /health when nothing is enforcing a limit', async () => {
+    expect((await (await get('/health')).json<{ rateLimiting: string }>()).rateLimiting).toBe(
+      'enforced',
+    )
+
+    const { API_RATE_LIMITER: _undeclared, ...unbound } = testEnv
+    const response = await worker.fetch(new Request('https://stats.example.com/health'), unbound)
+
+    expect((await response.json<{ rateLimiting: string }>()).rateLimiting).toBe('disabled')
   })
 
   it('404s an unknown path', async () => {

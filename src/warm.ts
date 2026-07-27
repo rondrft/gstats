@@ -16,6 +16,7 @@
  * spend the shared quota gently.
  */
 
+import { recordWrite } from './budget'
 import type { StatsCache } from './cache'
 import type { GitHubClient } from './github/client'
 import { parseParams } from './params'
@@ -178,6 +179,7 @@ export class KvWarmStore {
   async write(run: WarmRun): Promise<void> {
     try {
       await this.namespace.put(LAST_RUN_KEY, JSON.stringify(run), { expirationTtl: LAST_RUN_TTL })
+      await recordWrite(this.namespace, run.ranAt)
     } catch {
       // Losing the record costs visibility, not correctness.
     }

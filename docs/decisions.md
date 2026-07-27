@@ -239,25 +239,59 @@ as a miss — the key is a heuristic that depends on somebody remembering, and t
 is the guarantee. A missed bump now costs one extra upstream call instead of a
 card that throws.
 
-### The quota reading is sampled, not written per miss
+### The quota reading lives in the isolate, not in KV
 
 `src/cache.ts`
 
-It was written on every cache miss, alongside the stats entry — which made it
-*half* of every KV write the service performed, and KV writes are what the free
-plan runs out of first, forty-five times sooner than the GitHub quota it exists
-to protect.
+This has been wrong twice, in the same direction both times.
 
-It feeds `/health` and the low-quota fallback. Neither needs a value accurate to
-the request, so it is now sampled at most once every five minutes. The exception
-is the first crossing below 1,000 remaining, which is written immediately: an
-instance running out should be visible at once, not up to five minutes later.
-Once already below the line the interval takes over again, because that is
-exactly when the instance is busiest and least able to afford a write per
-request.
+It began written on every cache miss, alongside the stats entry — *half* of every
+KV write the service performed, spent on a diagnostic. Sampling it every five
+minutes fixed the proportion but left a **fixed floor of 288 writes a day**, 29%
+of the free allowance, paid whether the instance served two profiles or two
+hundred. A fixed cost to keep a diagnostic current is worse than it looks,
+because the ceiling has to be paid out of it before anything useful is served.
 
-The cost is one KV read before each write. Reads are the plentiful quota and
-writes are the scarce one, so trading one for one is the whole point.
+It is now a module variable. `/health` reads the isolate's own observation, and
+KV sees the reading only when `remaining` crosses below 1,000 — and then at most
+once every five minutes while it stays there, because that is exactly when the
+instance is busiest.
+
+**It is lossy on purpose.** An isolate is recycled and takes its reading with it,
+so `/health` served by a cold one reports whatever KV last heard, or `null`. That
+is an acceptable answer for a diagnostic. The case that is *not* diagnostic — the
+budget actually running out, which is what the stale-card fallback keys off — is
+written through, so it survives the isolate that noticed and is visible from
+every other one.
+
+The same reasoning is why the low-quota threshold is the trigger rather than a
+timer. Timers cost the same whether anything is happening or not; a threshold
+costs nothing until something is.
+
+### The write budget is counted in memory and sampled into KV
+
+`src/budget.ts`
+
+Running out of KV writes is the failure that cascades — nothing is cached, so
+every request is a miss, so the GitHub quota that had forty-five times the
+headroom drains in minutes — and until this existed there was no way to see it
+coming. The first symptom of the whole sequence was somebody's card going stale.
+
+The constraint writes itself: **a counter that wrote to KV on every write it
+counted would double the quantity it exists to protect.** So the isolate
+accumulates and flushes every 25, and the flush counts itself, which puts the
+overhead at one write in 26 — and makes it proportional to traffic rather than a
+fixed floor, which is the mistake the quota reading made twice.
+
+Two things are given up deliberately. It **undercounts**: writes held by an
+isolate that dies before it flushes are lost, and two locations flushing at once
+can each read the same total and overwrite each other. It is a floor, not an
+audit, which for "am I about to run out?" is the useful direction to be wrong in.
+And **deletes are not counted**, because Cloudflare bills them against their own
+daily allowance and folding them in would misreport the one figure this is about.
+
+`status: "warning"` at 80% rather than a number to interpret. Anyone reading
+`/health` while something is wrong is not in a state to divide.
 
 ### A failed fetch serves the expired entry
 
@@ -434,6 +468,77 @@ limit or an upstream blip resolves itself long before that would.
 
 `/purge` and `/health` answer JSON, because scripts call those and a script
 cannot read an SVG.
+
+There is one exception, below.
+
+### The rate limit refusal is the one non-200, and it is still drawn
+
+`src/index.ts`, `src/ratelimit.ts`
+
+A caller over their own limit gets `429` with `Retry-After`. That breaks the rule
+above, and it is the right break: every other failure is something the reader
+cannot act on and the service cannot signal, whereas this one is *addressed to
+whoever is generating the traffic*. A client that ignores `Retry-After` because
+the service answered 200 is a client that keeps hammering, and a status of 200
+would be a lie told to the only party able to stop.
+
+The body is a drawn card anyway. The rule that produced the rest of the error
+cards has not gone away — somebody's README is still an `<img>` — so the refusal
+says `too many requests, wait 1m` in the same typeface, in the caller's locale
+and theme. An empty body or a JSON one would leave a reader with nothing at all;
+this at least leaves them something to read if they open it. `no-store`, because
+a refusal that lapses in a minute must not be pinned to the URL by an
+intermediary that will still be holding it an hour later.
+
+The copy is deliberately not the `rate limited` used for GitHub's own quota. The
+two mean opposite things to whoever reads the card: one is a shared budget nobody
+can do anything about, the other is the caller's own traffic and is theirs to
+fix.
+
+### The limits are in the Worker, not in the WAF
+
+`src/ratelimit.ts`, `wrangler.toml`
+
+This project's own documentation recommended a WAF rate limiting rule for
+months. **It was not implementable.** WAF rules are configured per zone, and the
+default deployment target — a `workers.dev` subdomain — is not a zone anybody but
+Cloudflare can add rules to. The instructions described a dashboard page that,
+for this instance, has nothing to add a rule to.
+
+Cloudflare's Rate Limiting binding runs inside the Worker and needs no zone,
+which is the whole reason it is used here. Two of its properties shaped the code
+around it:
+
+- **The window is fixed at ten or sixty seconds.** An hourly budget cannot be
+  expressed with it at all, which is why the distinct-login ledger is a module
+  variable and why `pending.md` still carries an item about making it exact.
+- **The allowance is declared in `wrangler.toml` and cannot be read back at
+  runtime.** So the declared allowance is treated as a *token budget* and the
+  configurable limit decides what one request costs against it — which is what
+  makes `API_RATE_LIMIT` a variable rather than a redeploy of the binding.
+
+The same zone trap catches the Cache API, which is a documented no-op on
+`workers.dev` and would otherwise have been the obvious home for the ledger.
+Anything that sounds like "just use the edge for this" is worth checking against
+that constraint first.
+
+### The second limit counts distinct logins, not requests
+
+`src/ratelimit.ts`
+
+Thirty requests a minute is generous for a reader — a card is one request every
+half hour — and useless as a description of abuse. Thirty *misses* a minute is
+43,000 KV writes a day against an allowance of 1,000.
+
+What separates the two populations is breadth. A reader loads one or two profiles
+and reloads them; a scraper walks logins it has never asked for, and every one of
+those is a guaranteed miss worth three to five upstream queries and a write. So
+the budget is twenty distinct logins an hour per address, and a login already
+counted is free however many times it is asked for again.
+
+Both limits count cache hits. A hit still costs an invocation, and a limit that
+applied only to misses would be avoided by asking for one popular profile in a
+loop.
 
 ### A malformed parameter is never fatal
 

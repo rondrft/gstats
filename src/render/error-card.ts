@@ -1,11 +1,17 @@
 /**
  * Failure card.
  *
- * The service never answers a card request with a non-200 status or with JSON.
- * A reader looking at a README sees an `<img>`: a 404 renders as the browser's
+ * A card request is never answered with JSON or with an empty body. A reader
+ * looking at a README sees an `<img>`: a 404 renders as the browser's
  * broken-image glyph, which tells them nothing and tells the profile owner even
  * less. A card that says "user not found" in the same typeface as the real thing
  * is diagnosable at a glance.
+ *
+ * Every failure the service can reach a renderer with is answered `200` for the
+ * same reason. The single exception is a caller over their own rate limit, which
+ * carries `429` and `Retry-After` because it is addressed to whoever is making
+ * the requests rather than to whoever is reading the README — and it is drawn
+ * anyway, so that anyone who does look at it can read what happened.
  *
  * The same reasoning applies to caching. Failures are short-lived — a typo is
  * not, but a rate limit and an upstream blip are — so an error card is served
@@ -47,7 +53,11 @@ const FONT_STACK =
  * the other two are local misconfiguration, one by the caller and one by
  * whoever deployed the Worker.
  */
-export type ErrorCardKind = StatsErrorKind | 'missing-username' | 'not-configured'
+export type ErrorCardKind =
+  | StatsErrorKind
+  | 'missing-username'
+  | 'not-configured'
+  | 'too-many-requests'
 
 export interface ErrorCardOptions {
   kind: ErrorCardKind
@@ -63,6 +73,7 @@ export function renderErrorCard({ kind, style, retryAfterMinutes }: ErrorCardOpt
     'missing-username': strings.missingUsername,
     'not-configured': strings.notConfigured,
     'rate-limited': interpolate(strings.rateLimited, { minutes: retryAfterMinutes ?? 60 }),
+    'too-many-requests': interpolate(strings.tooManyRequests, { minutes: retryAfterMinutes ?? 1 }),
     upstream: strings.upstreamError,
   }
   const message = messages[kind]

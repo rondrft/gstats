@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cacheKey, hasCurrentShape, shouldSample } from '../src/cache'
+import { cacheKey, hasCurrentShape, shouldPublishAlert } from '../src/cache'
 import { type CardParams, parseParams } from '../src/params'
 
 function params(query: string): CardParams {
@@ -155,49 +155,44 @@ describe('build namespacing', () => {
 })
 
 /**
- * This reading used to be written on every cache miss, which made it half of
- * all the KV writes the service performs — and KV writes, not the GitHub quota,
- * are what the free plan runs out of first. It feeds `/health` and the low-quota
- * fallback, and neither needs a value accurate to the request.
+ * This reading used to be written to KV on a five-minute sample, which cost a
+ * fixed 288 writes a day per instance — 29% of the free plan's whole allowance
+ * — to keep one diagnostic field on `/health` current. It now lives in a module
+ * variable, and KV holds only the case that is not diagnostic: an instance
+ * actually running out, which has to survive the isolate that noticed.
  */
-describe('rate limit sampling', () => {
+describe('publishing a low quota reading', () => {
   const at = (minutes: number) => Date.parse('2026-07-27T12:00:00Z') + minutes * 60_000
-  const reading = (remaining: number, minutes: number) => ({
+  const stored = (remaining: number, minutes: number) => ({
     remaining,
     limit: 5000,
     reset: null,
     observedAt: at(minutes),
   })
 
-  it('always writes the first reading', () => {
-    expect(shouldSample(null, 4000, at(0))).toBe(true)
+  it('publishes when KV has never heard of the problem', () => {
+    expect(shouldPublishAlert(null, at(0))).toBe(true)
   })
 
-  it('skips a reading taken moments after the last one', () => {
-    expect(shouldSample(reading(4000, 0), 3990, at(1))).toBe(false)
-    expect(shouldSample(reading(4000, 0), 3990, at(4))).toBe(false)
-  })
-
-  it('writes once the sampling interval has passed', () => {
-    expect(shouldSample(reading(4000, 0), 3900, at(5))).toBe(true)
-    expect(shouldSample(reading(4000, 0), 3900, at(30))).toBe(true)
-  })
-
-  /** An instance running out of quota should be visible at once, not in five minutes. */
-  it('writes immediately when the budget crosses below the threshold', () => {
-    expect(shouldSample(reading(1200, 0), 900, at(1))).toBe(true)
+  it('publishes when KV still shows a healthy budget', () => {
+    expect(shouldPublishAlert(stored(4000, 0), at(1))).toBe(true)
   })
 
   /**
-   * Once it is already low the interval takes over again. That is exactly when
-   * the instance is busiest and least able to afford a write per request.
+   * Below the line every fresh isolate would otherwise write once, and that is
+   * exactly when the instance is busiest and least able to afford it.
    */
-  it('does not then write on every request while it stays low', () => {
-    expect(shouldSample(reading(900, 0), 800, at(1))).toBe(false)
-    expect(shouldSample(reading(900, 0), 800, at(5))).toBe(true)
+  it('does not republish an alert KV already carries', () => {
+    expect(shouldPublishAlert(stored(900, 0), at(1))).toBe(false)
+    expect(shouldPublishAlert(stored(900, 0), at(4))).toBe(false)
   })
 
-  it('writes when the budget recovers past the threshold and time has passed', () => {
-    expect(shouldSample(reading(500, 0), 4900, at(6))).toBe(true)
+  it('refreshes a stale alert so the reading does not rot', () => {
+    expect(shouldPublishAlert(stored(900, 0), at(5))).toBe(true)
+    expect(shouldPublishAlert(stored(900, 0), at(45))).toBe(true)
+  })
+
+  it('publishes over a reading whose remaining is unknown', () => {
+    expect(shouldPublishAlert({ ...stored(0, 0), remaining: null }, at(1))).toBe(true)
   })
 })

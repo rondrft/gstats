@@ -33,6 +33,8 @@ pnpm test
 src/
   index.ts          routing, response headers, the never-return-an-error rule
   params.ts         query string parsing, validation, sanitisation
+  ratelimit.ts      per-address limits on /api: requests, distinct logins
+  budget.ts         how much of the day's KV write allowance has gone
   stats.ts          cache -> GitHub -> stale fallback
   purge.ts          POST /purge: auth, rate limit, targeted invalidation
   warm.ts           the cron trigger: scheduled refresh of WARM_USERS

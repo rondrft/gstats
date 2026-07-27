@@ -221,7 +221,9 @@ The counter lives in KV, which is eventually consistent, so a burst arriving at
 several locations at once can overshoot slightly before the count catches up.
 That is fine for what it is guarding against.
 
-If you have put a Cloudflare rate limiting rule in front of your Worker as the
-[self-hosting guide suggests](self-hosting.md#7-protect-your-quota), scope it to
-the `/api` path rather than to the whole hostname. A rule covering `/purge` would
-throttle your own CI on top of the limit that is already there.
+The per-address limits described in the
+[self-hosting guide](self-hosting.md#7-protect-your-quota) deliberately do not
+cover this endpoint. `/purge` is called by its owner's CI from whatever address
+GitHub Actions happens to allocate, and throttling that on top of the per-token
+limit already here would cost the owner their own tooling to protect nothing —
+the token is the gate.

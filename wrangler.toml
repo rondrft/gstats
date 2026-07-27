@@ -15,6 +15,29 @@ enabled = true
 [triggers]
 crons = ["*/15 * * * *"]
 
+# Per-address limiting on /api, enforced inside the Worker.
+#
+# This is deliberately not a WAF rate limiting rule. Those are configured per
+# zone, and the default deployment target — a workers.dev subdomain — is not a
+# zone anybody but Cloudflare can add rules to, so the rule this project's docs
+# used to recommend could not actually be created. This binding needs no zone.
+#
+# `limit` is a token budget per address per minute, not a request count. The
+# platform fixes `period` at 10 or 60 seconds and gives the Worker no way to read
+# `limit` back at runtime, so the request limit is set with the API_RATE_LIMIT
+# variable below and each request spends `limit / API_RATE_LIMIT` tokens. Keep
+# this in step with RATE_LIMIT_TOKENS_PER_MINUTE in src/ratelimit.ts.
+#
+# namespace_id is a local identifier for the counter, not an account resource,
+# and it is not a secret.
+[[ratelimits]]
+name = "API_RATE_LIMITER"
+namespace_id = "1"
+
+  [ratelimits.simple]
+  limit = 60
+  period = 60
+
 # Cached GitHub responses. Create with:
 #   wrangler kv namespace create STATS_CACHE
 #   wrangler kv namespace create STATS_CACHE --preview
@@ -49,6 +72,26 @@ SERVICE_VERSION = "dev-local"
 # src/cache.ts and spends the shared hourly quota. Raise this on a busy
 # instance with `--var CARD_MAX_AGE:3600`.
 CARD_MAX_AGE = "1800"
+
+# Requests per minute per address on /api, cache hits included. Thirty is far
+# above what a README ever generates — a card is one request every half hour per
+# reader — and far below what enumerating logins needs.
+#
+# The ceiling is the token budget declared under [[ratelimits]] above. Values
+# that do not divide it round down to the nearest achievable limit, which is the
+# safe direction. Raising it past the budget means raising the budget too.
+API_RATE_LIMIT = "30"
+
+# Distinct logins per hour per address on /api. This is the limit that separates
+# a reader from a scraper: a reader loads one or two profiles, a scraper walks
+# hundreds, and every login it has not seen before is a guaranteed cache miss
+# and three to five upstream queries.
+PROFILE_RATE_LIMIT = "20"
+
+# Daily KV write allowance to measure against at /health. The default is the
+# free plan's; a Workers Paid instance should set this to 1000000 so that the
+# percentage means something.
+KV_WRITE_BUDGET = "1000"
 
 # Logins to keep permanently warm, comma separated, at most ten. Every fifteen
 # minutes each one is refetched and written back to KV, so nobody visiting those

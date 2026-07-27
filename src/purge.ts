@@ -13,6 +13,7 @@
  * which is exactly the cost the whole design is arranged to avoid.
  */
 
+import { recordWrite } from './budget'
 import { cachePrefix, type StatsCache } from './cache'
 import { USERNAME_PATTERN } from './params'
 
@@ -145,6 +146,7 @@ export class KvPurgeLimiter implements PurgeLimiter {
     try {
       // Two minutes, so the bucket outlives its own window without accumulating.
       await this.namespace.put(key, String(used + 1), { expirationTtl: 120 })
+      await recordWrite(this.namespace, this.now)
     } catch {
       // Losing the increment loosens the brake; refusing the purge would break
       // the feature. The looser failure is the better one.

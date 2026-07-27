@@ -159,18 +159,60 @@ To do it:
 
 ## 7. Protect your quota
 
-A public URL that spends your GitHub budget is worth a rate limit. In the
-Cloudflare dashboard, under **Security → WAF → Rate limiting rules**, add a rule
-on the Worker's hostname — something like 60 requests per minute per IP is
-generous for real README traffic and stops a scraper from draining an hour of
-quota in a minute.
+Already done, by `wrangler.toml`. There is nothing to configure in the dashboard
+and nothing to remember before sharing the URL — but two dials are worth knowing
+about, and one piece of advice that used to be here was wrong.
 
-**Scope the rule to the `/api` path**, not to the whole hostname. `/purge`
-carries its own per-token limit and is meant to be called by your CI; an IP rule
-covering it would throttle your own workflow for no benefit.
+`/api` is limited per client address, on two axes:
 
-Cache hits never touch GitHub, so the effective limit is much higher than it
-looks.
+| Variable | Default | What it limits |
+| --- | --- | --- |
+| `API_RATE_LIMIT` | 30 | requests a minute |
+| `PROFILE_RATE_LIMIT` | 20 | **distinct logins** an hour |
+
+The second is the one that matters. A reader loads one or two profiles, and
+asking for the same one again is free however often; a scraper walks logins it
+has never asked for, and every one of those is a guaranteed cache miss worth
+three to five upstream queries and a KV write. Counting breadth separates those
+two populations far more sharply than counting requests does.
+
+Both count cache hits as well as misses. What is being protected is not only the
+GitHub quota — a hit still costs an invocation, and the scarce resource is
+writes.
+
+Going over gets a `429` with `Retry-After` and a card that says so. `/health`,
+the landing page and `/purge` are exempt; `/purge` has its own per-token brake
+and is meant to be called by your CI, which an address limit would throttle for
+no benefit.
+
+To change either, redeploy with the variable set:
+
+```bash
+wrangler deploy --var API_RATE_LIMIT:15
+```
+
+`API_RATE_LIMIT` cannot be raised above the token budget declared under
+`[[ratelimits]]` in `wrangler.toml` — sixty by default. Raise that first if you
+want a looser limit; the comment there explains why the two are separate.
+
+> **Do not follow the older advice to add a WAF rate limiting rule.** It was
+> wrong, and it fails silently rather than visibly. WAF rules are configured per
+> zone, and `*.workers.dev` is not a zone in your account — there is no rule for
+> you to add. The binding above runs inside the Worker and needs no zone, which
+> is why it is used instead. If you put the Worker behind a domain you *do* own,
+> a WAF rule becomes available as an extra layer in front of these, not a
+> replacement for them.
+
+To confirm your instance is enforcing anything at all, `/health` says so:
+
+```bash
+curl -s https://<host>/health | jq .rateLimiting     # "enforced", not "disabled"
+```
+
+`"disabled"` means no binding is declared and every request is being served
+unthrottled. That is a legitimate way to run a private instance and a reckless
+way to run a public one, which is why it is reported rather than left to be
+inferred.
 
 ## Running locally
 
@@ -206,17 +248,40 @@ cache miss until it is fetched again.
 
 ## Monitoring
 
-`/health` reports the build, whether a token is configured, and the last observed
-rate limit window:
+`/health` reports the build, whether a token is configured, whether the address
+limits are being enforced, the last observed GitHub quota window, and how much of
+the day's KV write allowance has gone:
 
 ```json
 {
   "status": "ok",
   "version": "a8cd332",
   "tokenConfigured": true,
-  "rateLimit": { "remaining": 4873, "limit": 5000, "reset": 1785000000, "observedAt": 1784996400 }
+  "rateLimiting": "enforced",
+  "rateLimit": { "remaining": 4873, "limit": 5000, "reset": 1785000000, "observedAt": 1784996400 },
+  "writes": { "used": 312, "limit": 1000, "percent": 31 }
 }
 ```
+
+**`writes` is the number to watch, not `rateLimit`.** The GitHub quota above it
+is roughly forty-five times further from being the constraint — see
+[limits.md](limits.md). `status` turns to `warning` at 80% of the write
+allowance, which is the earliest useful warning of the cascade that document
+describes: once writes start failing nothing is cached, so every request becomes
+a miss, so the quota that had all that headroom drains in minutes.
+
+Two things to know about the figure. It is a **floor** — writes held by an
+isolate that is recycled before it flushes are lost, and it counts puts but not
+deletes, which Cloudflare bills separately. And it measures against the free
+plan's thousand a day unless you say otherwise, so on Workers Paid set
+`KV_WRITE_BUDGET` to `1000000` or the percentage will describe a limit you do
+not have.
+
+`rateLimit` may be `null` on a quiet instance. The reading now lives in the
+isolate rather than in KV, precisely so that keeping it current does not cost
+the writes above; a cold isolate has not observed one yet. It is written through
+to KV only when the budget falls below 1,000 remaining, which is the case worth
+surviving an isolate.
 
 `version` is the deployed commit. Locally `pnpm dev` reports `dev-<commit>`, and
 `dev-local` means `wrangler dev` was invoked directly without the wrapper. It is
@@ -248,8 +313,22 @@ changing one line in `src/index.ts`.
 **Every card says `upstream error`.** Usually an expired or revoked token. Check
 with `curl -H "authorization: bearer <token>" https://api.github.com/rate_limit`.
 
-**Cards say `rate limited`.** The hourly window is exhausted. `/health` shows
-when it resets. If it happens often, see *Monitoring* above.
+**Cards say `rate limited`.** GitHub's hourly window is exhausted. `/health`
+shows when it resets. If it happens often, see *Monitoring* above.
+
+**Cards say `too many requests`.** This instance is refusing, not GitHub, and
+only for the address making the requests — everybody else is unaffected. The
+response carries `Retry-After` and an `X-Rate-Limit` header saying which of the
+two limits was hit: `requests` for the per-minute one, `profiles` for the
+distinct-login budget. Raise the relevant variable in *Protect your quota* if
+the traffic is legitimate.
+
+**`/health` says `"status": "warning"`.** More than 80% of the day's KV write
+allowance is gone. Check `warming.configured` first — a warmed profile costs 96
+writes a day, roughly a tenth of the free allowance each, and `warm:last-run`
+costs another tenth on top regardless of how many are warmed. Otherwise the
+instance is serving more distinct profiles than the free plan supports; see
+[limits.md](limits.md). It resets at midnight UTC.
 
 **The card in my README will not update.** GitHub's image proxy is still serving
 its own copy. Wait it out — the card itself is already current, which you can

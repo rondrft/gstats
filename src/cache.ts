@@ -12,6 +12,7 @@
  * rather than with an error — see the fallback in `stats.ts`.
  */
 
+import { recordWrite } from './budget'
 import type { RateLimitState, StatsData } from './github/types'
 import type { DataParams } from './params'
 
@@ -185,6 +186,7 @@ export class KvStatsCache implements StatsCache {
       await this.namespace.put(key, JSON.stringify(entry), {
         expirationTtl: KV_EXPIRE_SECONDS,
       })
+      await recordWrite(this.namespace)
     } catch {
       // Losing a write costs one extra upstream call; failing the request costs
       // the reader a broken image.
@@ -260,10 +262,58 @@ export interface StoredRateLimit extends RateLimitState {
   observedAt: number
 }
 
+/**
+ * The last reading this isolate took.
+ *
+ * This is the whole of the storage in the ordinary case. Sampling the reading
+ * into KV every five minutes cost a fixed 288 writes a day per instance —
+ * 29% of the free plan's entire allowance — to keep one diagnostic field on
+ * `/health` current, and `docs/limits.md` had to subtract it from the ceiling
+ * before dividing. A module variable costs nothing at all.
+ *
+ * It is lossy on purpose. An isolate is recycled and its reading goes with it,
+ * so `/health` served by a cold one reports whatever KV last heard about, or
+ * `null`. For a diagnostic that is an acceptable answer. The case that is not
+ * diagnostic — the budget actually running out — is written through to KV, so
+ * it survives the isolate and is visible from every one of them.
+ */
+let observed: StoredRateLimit | null = null
+
+/**
+ * Discards the isolate's reading.
+ *
+ * For tests, which share module state within a file. Production has no reason
+ * to call it.
+ */
+export function forgetObservedRateLimit(): void {
+  observed = null
+}
+
+/** Remaining requests below which the reading stops being merely diagnostic. */
+const URGENT_REMAINING = 1_000
+
+/**
+ * How often the alert is refreshed in KV while the budget stays below the line.
+ *
+ * Below the threshold every fresh isolate would otherwise write once, and an
+ * instance in that state is by definition the busiest it gets. This caps the
+ * cost of the condition at the same interval the old sampler used, but only
+ * while the condition holds rather than permanently.
+ */
+const ALERT_REFRESH_MS = 5 * 60_000
+
 export class KvRateLimitStore {
   constructor(private readonly namespace: KVNamespace) {}
 
+  /**
+   * The isolate's own reading if it has one, and KV otherwise.
+   *
+   * Preferring memory is not only cheaper, it is more current: KV now holds
+   * only alerts, and an absent alert means the budget was healthy when anybody
+   * last looked.
+   */
   async read(): Promise<StoredRateLimit | null> {
+    if (observed !== null) return observed
     try {
       return await this.namespace.get<StoredRateLimit>(RATE_LIMIT_KEY, 'json')
     } catch {
@@ -271,52 +321,44 @@ export class KvRateLimitStore {
     }
   }
 
+  /**
+   * Records the reading in memory, and in KV only when it is an alert.
+   *
+   * The cost of the healthy case is zero. The cost of the unhealthy case is one
+   * read and at most one write every five minutes, which is what makes an
+   * instance running out of quota visible at `/health` from any isolate.
+   */
   async write(state: RateLimitState, observedAt: number): Promise<void> {
     if (state.remaining === null) return
 
-    let previous: StoredRateLimit | null = null
+    observed = { ...state, observedAt }
+    if (state.remaining >= URGENT_REMAINING) return
+
     try {
-      previous = await this.read()
-      if (!shouldSample(previous, state.remaining, observedAt)) return
-      await this.namespace.put(
-        RATE_LIMIT_KEY,
-        JSON.stringify({ ...state, observedAt } satisfies StoredRateLimit),
+      const stored = await this.namespace.get<StoredRateLimit>(RATE_LIMIT_KEY, 'json')
+      if (!shouldPublishAlert(stored, observedAt)) return
+
+      await this.namespace.put(RATE_LIMIT_KEY, JSON.stringify(observed), {
         // The window is an hour; keeping the record a little longer costs
         // nothing and makes `/health` useful during a quiet period.
-        { expirationTtl: 7_200 },
-      )
+        expirationTtl: 7_200,
+      })
+      await recordWrite(this.namespace, observedAt)
     } catch {
       // Best effort. A missing reading degrades the fallback, not the response.
     }
   }
 }
 
-/** Never write this reading more often than once every five minutes... */
-const SAMPLE_INTERVAL_MS = 5 * 60_000
-
-/** ...unless the budget just fell past here, which nobody should wait to see. */
-const URGENT_REMAINING = 1_000
-
 /**
- * Whether a new reading is worth a write.
+ * Whether a low reading is worth writing through to KV.
  *
- * This used to be written on every cache miss, which made it *half* of all the
- * KV writes the service performs — and KV writes, not the GitHub quota, are what
- * the free plan runs out of first. It feeds `/health` and the low-quota
- * fallback, and neither needs a reading accurate to the request.
- *
- * Sampling every five minutes halves the write cost of an active profile. The
- * threshold crossing is the exception: an instance running out of quota should
- * be visible at `/health` immediately, not up to five minutes later. Once it is
- * already below the line the interval takes over again, because that is exactly
- * when the instance is busiest and least able to afford a write per request.
+ * Called only when the budget is already below the threshold, so the question
+ * is never "is this interesting?" — it is "does KV already say so, recently
+ * enough?".
  */
-export function shouldSample(
-  previous: StoredRateLimit | null,
-  remaining: number,
-  now: number,
-): boolean {
-  if (previous === null || previous.remaining === null) return true
-  if (previous.remaining >= URGENT_REMAINING && remaining < URGENT_REMAINING) return true
-  return now - previous.observedAt >= SAMPLE_INTERVAL_MS
+export function shouldPublishAlert(stored: StoredRateLimit | null, now: number): boolean {
+  if (stored === null || stored.remaining === null) return true
+  if (stored.remaining >= URGENT_REMAINING) return true
+  return now - stored.observedAt >= ALERT_REFRESH_MS
 }

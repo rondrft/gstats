@@ -26,13 +26,26 @@ miss writes its stats entry.
 A miss costs one bootstrap query, one batched history query, and one to three
 pages of repositories — so three queries typically, five at most.
 
-There is also a **fixed instance overhead**: the quota reading at
-`v2:rate-limit`. It used to be written on every miss, which doubled the figure
-above to 8 and made it half of everything the service wrote. It is now sampled
-at most once every five minutes, which caps it at **288 writes a day for the
-whole instance** however many profiles are being served — and it still writes
-immediately the first time the budget falls below 1,000, so an instance running
-out is visible at `/health` at once.
+The **instance overhead** used to dominate that figure and no longer does.
+
+The quota reading at `v2:rate-limit` was written on every miss, which doubled
+the table above to 8 and made it half of everything the service wrote. Sampling
+it every five minutes capped it at 288 writes a day — better, but still a *fixed*
+floor of 29% of the free allowance, paid whether the instance served two profiles
+or two hundred, to keep one diagnostic field on `/health` current.
+
+It now lives in a module variable in the isolate and costs nothing. KV sees it
+only when `remaining` crosses below 1,000, and then at most once every five
+minutes while it stays there — so the case that is merely diagnostic is free and
+the case that is an emergency is still visible from every isolate. The cost is
+that `/health` served by a cold isolate reports whatever KV last heard, or
+`null`. For a diagnostic that is the right trade; see
+[decisions.md](decisions.md#the-quota-reading-lives-in-the-isolate-not-in-kv).
+
+What remains is the write counter that produces the `writes` figure at
+`/health`. It accumulates in the isolate and flushes every 25 writes, and the
+flush counts itself — so it costs **one write in 26**, about 3.8%, and it scales
+with the traffic rather than sitting on the budget as a fixed floor.
 
 ## The two ceilings
 
@@ -40,14 +53,17 @@ out is visible at `/health` at once.
 every other Worker on the same account, so the real allowance is lower.
 
 ```
-(1,000 − 288 overhead) ÷ 4 writes/profile/day  ≈  178 active profiles
+1,000 × 25/26 counter overhead  =  ~961 writes for cards
+~961 ÷ 4 writes/profile/day     ≈  240 active profiles
 ```
 
-Before the quota reading was sampled this was ~125. Halving the per-profile cost
-did not quite double the ceiling, because the sampling floor is a fixed cost the
-ceiling now has to be paid out of. Raising the sampling interval from five
-minutes to fifteen would take the overhead to 96 and the ceiling to about 226,
-at the price of a coarser `/health`.
+The progression is worth keeping in view, because each step moved the number for
+a different reason: **~125** when the quota reading was written on every miss,
+**~178** when it was sampled every five minutes, **~240** now that it is only
+written when it matters. A hypothetical instance with no write counter at all
+would reach 250 — the counter costs about ten profiles of headroom and buys the
+ability to see the ceiling coming, which is a trade this document exists to
+argue for.
 
 **GitHub GraphQL: 5,000 points per hour = 120,000 per day**, per token.
 
@@ -73,7 +89,7 @@ day**, each one a full fetch and store.
 | --- | --- |
 | Per warmed profile | **96 KV writes** |
 | The `warm:last-run` record | 96 writes, **for the whole instance** |
-| The quota reading | already counted in the 288 above |
+| The quota reading | nothing, unless the budget is running out |
 
 So **one warmed profile is about 10% of the free plan's entire daily write
 budget**, and the status record is another 10% on top regardless of how many
@@ -115,6 +131,50 @@ So the failure has been softened rather than removed. An instance past its write
 budget serves increasingly old cards instead of breaking, which is the right
 direction, and `/health` shows the quota falling while it happens. It is still a
 condition to fix rather than to live in.
+
+## Seeing it coming
+
+Softening the cascade is not the same as noticing it. Until recently there was
+no way to know an instance was at 900 writes rather than 200, which meant the
+first symptom of the whole sequence above was somebody's card going stale.
+
+`/health` now reports the day's write count:
+
+```json
+"status": "warning",
+"writes": { "used": 831, "limit": 1000, "percent": 83 }
+```
+
+`status` turns from `ok` to `warning` at 80%. The count is UTC-daily, because
+that is when Cloudflare's allowance resets, and it is a **floor rather than an
+audit**: writes held by an isolate that is recycled before it flushes are lost,
+and two locations flushing at once can each read the same total. Deletes are not
+counted, because Cloudflare bills them against a separate allowance.
+
+Set `KV_WRITE_BUDGET` to `1000000` on a Workers Paid instance, or the percentage
+will describe a limit that instance does not have.
+
+## Protecting the instance from the outside
+
+Everything above assumes the traffic is readers. A public URL also attracts
+enumeration, and a loop over invented logins is the worst possible shape of
+traffic for this service: every login is a guaranteed miss, and every miss is
+three to five upstream queries **and a KV write**.
+
+This is why the limits in `src/ratelimit.ts` count distinct logins per address
+and not just requests. Thirty requests a minute is a generous ceiling for a
+reader — a card is one request every half hour — but thirty *misses* a minute is
+43,000 writes a day against an allowance of 1,000. The login budget is what
+makes the difference: a reader asks for one or two profiles, and asking for the
+same one again is free.
+
+They are enforced by Cloudflare's Rate Limiting binding, inside the Worker.
+**Not by a WAF rate limiting rule**, which earlier versions of these documents
+recommended and which cannot be created for the default deployment: WAF rules
+are configured per zone, and a `workers.dev` subdomain is not a zone anybody but
+Cloudflare can add rules to. The same trap catches the Cache API, whose
+operations are documented no-ops on `workers.dev` — which is why the login
+ledger is kept in the isolate rather than there.
 
 ## The paid plan
 

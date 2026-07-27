@@ -22,6 +22,13 @@ export interface Strings {
   missingUsername: string
   /** `{minutes}` is substituted with the wait implied by GitHub's reset header. */
   rateLimited: string
+  /**
+   * Shown when this instance, not GitHub, is the one refusing. `{minutes}` is
+   * the wait it will honour. Distinct copy from `rateLimited` on purpose: one
+   * is a shared quota nobody can do anything about, the other is a limit on
+   * the caller's own traffic and is the caller's to fix.
+   */
+  tooManyRequests: string
   upstreamError: string
   /** Shown to a self-hoster who has not set `GITHUB_TOKEN`. */
   notConfigured: string
@@ -41,6 +48,7 @@ const EN: Strings = {
   userNotFound: 'user not found',
   missingUsername: 'missing ?username=',
   rateLimited: 'rate limited, retry in {minutes}m',
+  tooManyRequests: 'too many requests, wait {minutes}m',
   upstreamError: 'upstream error',
   notConfigured: 'GITHUB_TOKEN is not set',
 }
@@ -55,6 +63,7 @@ const ES: Strings = {
   userNotFound: 'usuario inexistente',
   missingUsername: 'falta ?username=',
   rateLimited: 'limite alcanzado, reintenta en {minutes}m',
+  tooManyRequests: 'demasiadas peticiones, espera {minutes}m',
   upstreamError: 'error del servidor',
   notConfigured: 'GITHUB_TOKEN no esta configurado',
 }
