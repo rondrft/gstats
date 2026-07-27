@@ -58,7 +58,6 @@ CARD_MAX_AGE = "1800"
 # Empty by default. Read docs/purging.md before adding more than a couple: the
 # GitHub cost is negligible but the KV writes are not, against a free plan that
 # allows a thousand a day.
-WARM_USERS = ""
 
 # Secrets, which must never appear here. Set them with:
 #   wrangler secret put GITHUB_TOKEN   # required
