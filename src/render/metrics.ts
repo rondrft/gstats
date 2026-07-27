@@ -17,13 +17,13 @@
  */
 
 /** Advance width of one glyph, as a fraction of the font size. */
-export const ADVANCE_RATIO = 0.6
+const ADVANCE_RATIO = 0.6
 
 /** Baseline to the top of an ascender, as a fraction of the font size. */
-export const ASCENT_RATIO = 0.78
+const ASCENT_RATIO = 0.78
 
 /** Baseline to the bottom of a descender, as a fraction of the font size. */
-export const DESCENT_RATIO = 0.27
+const DESCENT_RATIO = 0.27
 
 /**
  * Width of a run of text.

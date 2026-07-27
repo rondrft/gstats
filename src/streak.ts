@@ -142,8 +142,3 @@ export function utcToday(now: Date = new Date()): string {
 export function addDays(date: string, delta: number): string {
   return shiftDays(date, delta)
 }
-
-/** Day of the week for a UTC date, 0 = Sunday. */
-export function weekdayOf(date: string): number {
-  return new Date(toTimestamp(date)).getUTCDay()
-}

@@ -33,7 +33,7 @@ const COLOR_PATTERN = /^#?(?:[0-9a-fA-F]{3,4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
 
 const COLOR_KEYWORDS = new Set(['none', 'transparent'])
 
-export const MODULES = ['total', 'streak', 'best', 'langs'] as const
+const MODULES = ['total', 'streak', 'best', 'langs'] as const
 export type ModuleName = (typeof MODULES)[number]
 
 export const LANG_STYLES = ['blocks', 'bars'] as const

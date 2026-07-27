@@ -26,7 +26,6 @@ import { addDays } from '../../streak'
 import { credit, frame, motion, plate, round, svgDocument, text } from '../chrome'
 import { mix } from '../color'
 import { layoutRow } from '../layout'
-import { escapeXml } from '../xml'
 import { describe, visibleStats } from './modules'
 import type { CardRenderer, RenderOptions } from './registry'
 
@@ -110,7 +109,7 @@ function intensityRamp(bg: string, ring: string, accent: string): string[] {
  * mostly zeros, and including them would push every quartile boundary to zero
  * and flatten the grid to two levels.
  */
-export function levelsFor(calendar: CompactCalendar): number[] {
+function levelsFor(calendar: CompactCalendar): number[] {
   const active = calendar.counts.filter((count) => count > 0).sort((a, b) => a - b)
   if (active.length === 0) return calendar.counts.map(() => 0)
 
@@ -262,9 +261,3 @@ function monthLabels(calendar: CompactCalendar, x: number, y: number, fill: stri
 }
 
 export const heatmap: CardRenderer = { id: 'heatmap', render: renderHeatmap }
-
-/** Re-exported so tests can build a grid without reaching into the module. */
-export const HEATMAP_GEOMETRY = { CELL, PITCH, WEEKS, DAYS, GRID_WIDTH, GRID_HEIGHT }
-
-/** Used by the landing page's alt text. */
-export const heatmapLabel = (login: string) => escapeXml(`${login} contribution heatmap`)

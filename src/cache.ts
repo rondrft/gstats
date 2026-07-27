@@ -79,25 +79,7 @@ export interface StatsCache {
 }
 
 /**
- * Cache key: `v1:<build>:<login>:<hash of the data-shaping parameters>`.
- *
- * Only inputs that change the *bytes we fetch* participate in the hash: the
- * username, how many languages are ranked, which are excluded, and which modules
- * are hidden (hiding a module skips its query entirely). Style parameters are
- * deliberately absent — the entry holds data, not pixels, so a request in a
- * different theme reuses whatever an earlier request already paid for.
- *
- * The build component is the deployed `SERVICE_VERSION`. Including it retires
- * every entry on deploy, which removes the standing hazard of a release that
- * changes the shape of `StatsData` and then reads yesterday's entries back into
- * the new type. The manual `SCHEMA_VERSION` below no longer has to be remembered.
- *
- * It is not free: the first request for each profile after a deploy is a miss,
- * so a release spends fresh GitHub quota proportional to how many distinct
- * profiles are active. On a busy instance that is the cost worth watching.
- */
-/**
- * Everything cached for one login, under one build.
+ * Everything cached for one login, under one schema and one build.
  *
  * A login does not have *an* entry: it has one per combination of the
  * parameters that shape what is fetched, so purging has to work by prefix.
@@ -108,6 +90,19 @@ export function cachePrefix(username: string, build: string): string {
   return `${SCHEMA_VERSION}:${build}:${username.toLowerCase()}:`
 }
 
+/**
+ * Cache key: `<schema>:<build>:<login>:<hash of the data-shaping parameters>`.
+ *
+ * Only inputs that change the *bytes we fetch* participate in the hash: the
+ * username, how the languages are ranked and filtered, and which modules are
+ * hidden (hiding a module skips its query entirely). Style parameters are
+ * deliberately absent — the entry holds data, not pixels, so a request in a
+ * different theme reuses whatever an earlier request already paid for.
+ *
+ * The build component retires every entry on deploy, which is not free: the
+ * first request for each profile after a release is a miss, so a deploy spends
+ * fresh GitHub quota in proportion to how many distinct profiles are active.
+ */
 export function cacheKey(params: DataParams, build: string): string {
   const dataShape = [
     `l=${params.langsCount}`,
@@ -220,7 +215,7 @@ export class KvStatsCache implements StatsCache {
   }
 }
 
-/** In-memory implementation used by tests and by `wrangler dev` without KV. */
+/** In-memory implementation, used by the tests. */
 export class MemoryStatsCache implements StatsCache {
   private readonly entries = new Map<string, CacheEntry>()
 

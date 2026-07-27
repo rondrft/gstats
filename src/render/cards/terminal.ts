@@ -20,8 +20,8 @@
  */
 
 import type { StatsData } from '../../github/types'
-import { formatDayRange, formatNumber, interpolate, type Strings } from '../../i18n'
-import type { CardParams, ModuleName, StyleParams } from '../../params'
+import type { Strings } from '../../i18n'
+import type { CardParams, StyleParams } from '../../params'
 import { credit, frame, plate, round, svgDocument } from '../chrome'
 import { type IconName, icon } from '../icons'
 import { langsBlock, measureLangs } from '../langs'
@@ -36,6 +36,7 @@ import {
 } from '../layout'
 import { ring, valueFontSize } from '../ring'
 import { escapeXml } from '../xml'
+import { describe, type StatModule, visibleStats } from './modules'
 import type { CardRenderer, RenderOptions } from './registry'
 
 /** Staggering the rings reads as one gesture rather than three simultaneous ones. */
@@ -43,11 +44,8 @@ const ANIMATION_STAGGER_SECONDS = 0.12
 const ANIMATION_DURATION = '0.9s'
 const ANIMATION_EASING = 'cubic-bezier(0.22, 1, 0.36, 1)'
 
-interface RingSpec {
-  module: ModuleName
-  value: number
-  label: string
-  subtitle: string
+/** The shared per-module figures, plus what only a ring needs. */
+interface RingSpec extends StatModule {
   /** Fraction of the arc to paint, 0-1. */
   pct: number
   color: string
@@ -63,13 +61,13 @@ interface RingSpec {
  * a locale or the set of visible modules moves the whole composition together
  * instead of leaving one piece behind at a hard-coded offset.
  */
-export function renderTerminal(data: StatsData, { params, strings }: RenderOptions): string {
+function renderTerminal(data: StatsData, { params, strings }: RenderOptions): string {
   const { style } = params
   const specs = ringSpecs(data, params, strings)
   const showLangs = !params.hide.has('langs')
 
   const layout = layoutCard(
-    specs.map((spec) => columnContent(spec, style.locale)),
+    specs.map(columnContent),
     showLangs ? measureLangs(data.languages, strings.noLanguages) : { lineCount: 0, width: 0 },
   )
 
@@ -110,7 +108,7 @@ export function renderTerminal(data: StatsData, { params, strings }: RenderOptio
     {
       width: layout.width,
       height: layout.height,
-      label: ariaLabel(data, specs, style.locale),
+      label: describe(data, specs),
       css: animationStyles(drawn.map(({ keyframes }) => keyframes)),
     },
     body,
@@ -120,72 +118,53 @@ export function renderTerminal(data: StatsData, { params, strings }: RenderOptio
 export const terminal: CardRenderer = { id: 'terminal', render: renderTerminal }
 
 /** Reduces a ring to the strings the layout needs in order to measure it. */
-function columnContent(spec: RingSpec, locale: string): ColumnContent {
-  const value = formatNumber(spec.value, locale)
+function columnContent(spec: RingSpec): ColumnContent {
   return {
-    value,
-    valueFontSize: valueFontSize(value),
+    value: spec.formatted,
+    valueFontSize: valueFontSize(spec.formatted),
     label: spec.label,
-    subtitle: spec.subtitle,
+    subtitle: spec.detail,
   }
 }
 
+/**
+ * The visible modules, each given the geometry and colour a ring needs.
+ *
+ * The figures, the labels and the date ranges come from `visibleStats`, which
+ * every design shares — that is what makes `hide` and `locale` behave the same
+ * everywhere instead of once per design.
+ */
 function ringSpecs(data: StatsData, params: CardParams, strings: Strings): RingSpec[] {
   const { current, longest } = data.streaks
-  const firstYear = Number(data.createdAt.slice(0, 4))
-  const thisYear = new Date(data.fetchedAt).getUTCFullYear()
+  const { style } = params
 
-  const range = (start: string | null, end: string | null) =>
-    start === null || end === null
-      ? strings.noStreak
-      : formatDayRange(start, end, params.style.locale, thisYear)
-
-  const all: RingSpec[] = [
-    {
-      module: 'total',
-      value: data.totalContributions,
-      label: strings.total,
-      subtitle: interpolate(strings.since, { year: firstYear }),
-      // No denominator exists for a lifetime total, so the ring is a frame
-      // rather than a measurement and is always full. Inventing a maximum here
-      // — "1000 contributions is 100%" — would be decoration pretending to be
-      // data, and the number in the middle already carries the information.
-      pct: 1,
-      color: params.style.ring,
-      valueColor: params.style.text,
-      icon: 'chartBar',
-    },
-    {
-      module: 'streak',
-      value: current.length,
-      label: strings.streak,
-      subtitle: range(current.start, current.end),
-      // The only ring with an honest denominator: today's streak measured
-      // against this account's own record. It reaches full exactly when the
-      // reader is having their best run ever, which is the thing worth showing.
+  const ringOf: Record<string, Omit<RingSpec, keyof StatModule>> = {
+    // No denominator exists for a lifetime total, so the ring is a frame rather
+    // than a measurement and is always full. Inventing a maximum here — "1000
+    // contributions is 100%" — would be decoration pretending to be data, and
+    // the number in the middle already carries the information.
+    total: { pct: 1, color: style.ring, valueColor: style.text, icon: 'chartBar' },
+    // The only ring with an honest denominator: today's streak measured against
+    // this account's own record. It reaches full exactly when the reader is
+    // having their best run ever, which is the thing worth showing.
+    streak: {
       pct: longest.length === 0 ? 0 : current.length / longest.length,
-      color: params.style.accent,
-      valueColor: params.style.accentText,
+      color: style.accent,
+      valueColor: style.accentText,
       icon: 'flame',
     },
-    {
-      module: 'best',
-      value: longest.length,
-      label: strings.best,
-      subtitle: range(longest.start, longest.end),
-      // The record is its own maximum.
-      pct: 1,
-      color: params.style.ring,
-      valueColor: params.style.text,
-      icon: 'trophy',
-    },
-  ]
+    // The record is its own maximum.
+    best: { pct: 1, color: style.ring, valueColor: style.text, icon: 'trophy' },
+  }
 
-  return all.filter((spec) => !params.hide.has(spec.module))
+  return visibleStats(data, params, strings).flatMap((stat) => {
+    const ring = ringOf[stat.module]
+    return ring === undefined ? [] : [{ ...stat, ...ring }]
+  })
 }
 
 function ringText(spec: RingSpec, cx: number, cy: number, style: StyleParams): string {
-  const value = formatNumber(spec.value, style.locale)
+  const value = spec.formatted
   const fontSize = valueFontSize(value)
   const x = round(cx)
 
@@ -197,7 +176,7 @@ function ringText(spec: RingSpec, cx: number, cy: number, style: StyleParams): s
     `font-size="${LABEL_FONT_SIZE}" fill="${style.muted}">${escapeXml(spec.label)}</text>` +
     `<text x="${x}" y="${round(cy + SUBTITLE_BASELINE)}" text-anchor="middle" ` +
     `font-size="${SUBTITLE_FONT_SIZE}" fill="${style.muted}" opacity="0.7">` +
-    `${escapeXml(spec.subtitle)}</text>`
+    `${escapeXml(spec.detail)}</text>`
   )
 }
 
@@ -225,16 +204,4 @@ function animationStyles(keyframes: readonly string[]): string {
     .join('')
 
   return `${rules}@media (prefers-reduced-motion:reduce){.ring-progress{animation:none}}`
-}
-
-/**
- * Text alternative for screen readers and for the `<img>` title.
- *
- * The card is otherwise a wall of shapes; this is the only place the profile is
- * described in words.
- */
-function ariaLabel(data: StatsData, specs: readonly RingSpec[], locale: string): string {
-  const who = data.name === null ? data.login : `${data.name} (${data.login})`
-  const parts = specs.map((spec) => `${formatNumber(spec.value, locale)} ${spec.label}`)
-  return parts.length === 0 ? who : `${who}: ${parts.join(', ')}`
 }

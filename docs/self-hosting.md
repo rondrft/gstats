@@ -218,8 +218,11 @@ rate limit window:
 }
 ```
 
-`version` is the deployed commit, or `dev` under `wrangler dev`. It is the
-quickest way to tell whether the instance is running what you think it is.
+`version` is the deployed commit. Locally `pnpm dev` reports `dev-<commit>`, and
+`dev-local` means `wrangler dev` was invoked directly without the wrapper. It is
+the quickest way to tell whether the instance is running what you think it is,
+and it is also part of the cache key — see
+[decisions.md](decisions.md#schema_version-exists-alongside-the-build-id-and-reads-are-validated).
 
 If `remaining` regularly approaches zero, the instance is serving more distinct
 profiles than one token can support. That number is driven by how long KV counts

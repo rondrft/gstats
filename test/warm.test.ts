@@ -269,3 +269,15 @@ function keyFor(username: string): string {
   if (!parsed.ok) throw new Error(`bad fixture login: ${username}`)
   return cacheKey(parsed.params, 'test')
 }
+
+/**
+ * The shipped configuration is what every self-hoster starts from. A login left
+ * in `WARM_USERS` would quietly spend their GitHub quota and their KV write
+ * budget refreshing somebody else's profile, on an instance they never asked to
+ * do that — and nothing about the running service would look wrong.
+ */
+describe('the shipped default', () => {
+  it('warms nobody', () => {
+    expect(parseWarmUsers(testEnv.WARM_USERS).users).toEqual([])
+  })
+})

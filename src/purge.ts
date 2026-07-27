@@ -91,7 +91,7 @@ function bearer(header: string | null): string | null {
  * mean hashing, which is more machinery than a shared secret of unbounded
  * length needs.
  */
-export function timingSafeEqual(a: string, b: string): boolean {
+function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false
   let difference = 0
   for (let index = 0; index < a.length; index += 1) {

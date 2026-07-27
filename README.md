@@ -240,6 +240,16 @@ Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md)
 for the layout of the codebase and how to run it locally. Participation is
 governed by the [Code of Conduct](CODE_OF_CONDUCT.md).
 
+Before changing anything that looks arbitrary, read
+[docs/decisions.md](docs/decisions.md): most of the odd-looking choices here are
+working around something, and several were written the obvious way first and
+corrected once a test proved the obvious way was wrong.
+
+- [docs/decisions.md](docs/decisions.md) — why things are the way they are.
+- [docs/limits.md](docs/limits.md) — the quota arithmetic, and where it stops
+  scaling. The ceiling is KV writes, not the GitHub quota.
+- [docs/pending.md](docs/pending.md) — what is missing, in priority order.
+
 ## Licence
 
 [MIT](LICENSE).

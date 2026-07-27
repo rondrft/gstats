@@ -29,7 +29,7 @@ import { StatsError } from './types'
  * a card and what GitHub itself shows. The streak calculation needs far less,
  * but the same array serves both.
  */
-export const CALENDAR_SPAN = 53 * 7
+const CALENDAR_SPAN = 53 * 7
 
 /**
  * Reduces a dated calendar to a positional one ending on `today`.
