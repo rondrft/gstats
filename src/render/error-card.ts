@@ -15,9 +15,9 @@
 import type { StatsErrorKind } from '../github/types'
 import { interpolate, resolveLocale } from '../i18n'
 import type { StyleParams } from '../params'
-import { CARD_HEIGHT } from './card'
-import { icon } from './icons'
-import { ring } from './ring'
+import { ICON_SIZE, icon } from './icons'
+import { CARD_HEIGHT, FRAME_INSET } from './layout'
+import { RADIUS, ring, STROKE_WIDTH } from './ring'
 import { escapeXml } from './xml'
 
 /**
@@ -30,7 +30,15 @@ const WIDTH = 400
 /** How long a client may reuse an error card, in seconds. */
 export const ERROR_CACHE_SECONDS = 60
 
-const FRAME_INSET = 12
+/**
+ * The ring is not symmetric about its own centre: the icon sits above the arc
+ * and nothing balances it below. Centring the ink rather than the axis keeps the
+ * mark from riding low, the same correction the full card's layout applies.
+ */
+const INK_TOP = -(RADIUS + ICON_SIZE / 2)
+const INK_BOTTOM = RADIUS + STROKE_WIDTH / 2
+const RING_CENTRE_Y = (CARD_HEIGHT - (INK_BOTTOM - INK_TOP)) / 2 - INK_TOP
+
 const FONT_STACK =
   "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace"
 
@@ -59,7 +67,7 @@ export function renderErrorCard({ kind, style, retryAfterMinutes }: ErrorCardOpt
   }
   const message = messages[kind]
 
-  const cy = CARD_HEIGHT / 2
+  const cy = RING_CENTRE_Y
   const cx = 60
   // An empty ring: the shape is recognisable as this service's card, and a
   // hollow one reads as "nothing to show" without needing a separate icon set.

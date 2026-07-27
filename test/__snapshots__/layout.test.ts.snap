@@ -1,0 +1,10 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`layout snapshot > records the geometry of each configuration 1`] = `
+"default  |  585x150  |  cy=62.62  |  rings=[102.85, 222.85, 342.85]  |  margins h=59.95/59.95 v=27.22/27.22
+hide=langs  |  451x150  |  cy=62.62  |  rings=[102.95, 222.95, 342.95]  |  margins h=60.05/60.05 v=27.22/27.22
+hide=total  |  468x150  |  cy=62.62  |  rings=[106, 226]  |  margins h=59.8/59.8 v=27.22/27.22
+hide=total,streak,best  |  232x150  |  cy=75  |  rings=[]  |  margins h=59.9/59.9 v=39.23/39.22
+langs_count=8  |  585x150  |  cy=62.62  |  rings=[102.85, 222.85, 342.85]  |  margins h=59.95/59.95 v=12/12
+no public repos  |  572x150  |  cy=62.62  |  rings=[102.95, 222.95, 342.95]  |  margins h=60.05/60.05 v=27.22/27.22"
+`;

@@ -17,40 +17,23 @@ import type { StatsData } from '../github/types'
 import { formatDayRange, formatNumber, interpolate, resolveLocale, type Strings } from '../i18n'
 import type { CardParams, ModuleName, StyleParams } from '../params'
 import { type IconName, icon } from './icons'
-import { langsBlock } from './langs'
+import { langsBlock, measureLangs } from './langs'
+import {
+  CARD_HEIGHT,
+  type CardLayout,
+  type ColumnContent,
+  FRAME_INSET,
+  LABEL_BASELINE,
+  LABEL_FONT_SIZE,
+  layoutCard,
+  SUBTITLE_BASELINE,
+  SUBTITLE_FONT_SIZE,
+  VALUE_BASELINE,
+} from './layout'
 import { ring, valueFontSize } from './ring'
 import { escapeXml } from './xml'
 
-export const CARD_HEIGHT = 150
-
-/** Distance from the card edge to the inner frame. */
-const FRAME_INSET = 12
-
-/** Horizontal space allotted to one ring, including its label. */
-const RING_SLOT = 120
-
-/** Left margin before the first ring's slot begins. */
-const RINGS_PAD = 58
-
-/** Gap between the last ring's slot and the language block. */
-const LANGS_GAP = 22
-
-/**
- * Width reserved for the language block. The widest possible line is 17
- * monospace cells at 11px, roughly 112 units, so 120 leaves the text clear of
- * the right margin at every language count.
- */
-const LANGS_WIDTH = 120
-
-const RIGHT_PAD = 40
-
-/** Vertical offsets relative to the ring centre. */
-const VALUE_BASELINE = 7
-const LABEL_BASELINE = 47
-const SUBTITLE_BASELINE = 58
-
-const LABEL_FONT_SIZE = 11
-const SUBTITLE_FONT_SIZE = 8
+export { CARD_HEIGHT }
 
 const FONT_STACK =
   "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace"
@@ -72,58 +55,81 @@ interface RingSpec {
   icon: IconName
 }
 
+/**
+ * Measures the card, then draws it.
+ *
+ * The two halves are kept apart on purpose. Nothing below decides where
+ * anything goes — `layoutCard` owns every coordinate — so a change to a label,
+ * a locale or the set of visible modules moves the whole composition together
+ * instead of leaving one piece behind at a hard-coded offset.
+ */
 export function renderCard(data: StatsData, params: CardParams): string {
   const { style } = params
   const strings = resolveLocale(style.locale)
   const specs = ringSpecs(data, params, strings)
   const showLangs = !params.hide.has('langs')
 
-  const ringsWidth = specs.length > 0 ? RINGS_PAD + specs.length * RING_SLOT : 0
-  const width = Math.max(
-    RINGS_PAD * 2,
-    ringsWidth + (showLangs ? LANGS_GAP + LANGS_WIDTH + RIGHT_PAD : RINGS_PAD),
+  const layout = layoutCard(
+    specs.map((spec) => columnContent(spec, style.locale)),
+    showLangs ? measureLangs(data.languages, strings.noLanguages) : { lineCount: 0, width: 0 },
   )
-  const centerY = CARD_HEIGHT / 2
 
   const drawn = specs.map((spec, index) => {
-    const cx = RINGS_PAD + index * RING_SLOT + RING_SLOT / 2
+    const cx = layout.ringCentres[index] ?? 0
     return {
       spec,
       cx,
-      ...ring({ cx, cy: centerY, pct: spec.pct, color: spec.color, index, animate: style.animate }),
+      ...ring({
+        cx,
+        cy: layout.cy,
+        pct: spec.pct,
+        color: spec.color,
+        index,
+        animate: style.animate,
+      }),
     }
   })
 
   const body =
-    background(width, style) +
-    frame(width, style) +
-    drawn.map(({ spec, cx, markup }) => markup + ringText(spec, cx, centerY, style)).join('') +
-    (showLangs
-      ? langsBlock({
+    background(layout, style) +
+    frame(layout, style) +
+    drawn.map(({ spec, cx, markup }) => markup + ringText(spec, cx, layout.cy, style)).join('') +
+    (layout.langs === null
+      ? ''
+      : langsBlock({
           languages: data.languages,
-          x: ringsWidth + LANGS_GAP,
-          cy: centerY,
+          placement: layout.langs,
           text: style.text,
           muted: style.muted,
           fallbackColor: style.ring,
           style: style.langStyle,
           emptyLabel: strings.noLanguages,
-        })
-      : '') +
-    (style.showCredit ? credit(width, style) : '')
+        })) +
+    (style.showCredit ? credit(layout, style) : '')
 
   const styleBlock = animationStyles(drawn.map(({ keyframes }) => keyframes))
+  const label = escapeXml(ariaLabel(data, specs, style.locale))
 
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${CARD_HEIGHT}" ` +
-    `viewBox="0 0 ${width} ${CARD_HEIGHT}" role="img" ` +
-    `aria-label="${escapeXml(ariaLabel(data, specs, style.locale))}" ` +
-    `font-family="${FONT_STACK}">` +
-    `<title>${escapeXml(ariaLabel(data, specs, style.locale))}</title>` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${layout.height}" ` +
+    `viewBox="0 0 ${layout.width} ${layout.height}" role="img" ` +
+    `aria-label="${label}" font-family="${FONT_STACK}">` +
+    `<title>${label}</title>` +
     styleBlock +
     body +
     `</svg>`
   )
+}
+
+/** Reduces a ring to the strings the layout needs in order to measure it. */
+function columnContent(spec: RingSpec, locale: string): ColumnContent {
+  const value = formatNumber(spec.value, locale)
+  return {
+    value,
+    valueFontSize: valueFontSize(value),
+    label: spec.label,
+    subtitle: spec.subtitle,
+  }
 }
 
 function ringSpecs(data: StatsData, params: CardParams, strings: Strings): RingSpec[] {
@@ -183,18 +189,22 @@ function ringSpecs(data: StatsData, params: CardParams, strings: Strings): RingS
 function ringText(spec: RingSpec, cx: number, cy: number, style: StyleParams): string {
   const value = formatNumber(spec.value, style.locale)
   const fontSize = valueFontSize(value)
+  const x = round(cx)
 
   return (
     icon(spec.icon, cx, cy, spec.color) +
-    `<text x="${cx}" y="${cy + VALUE_BASELINE}" text-anchor="middle" font-size="${fontSize}" ` +
-    `fill="${spec.valueColor}">${escapeXml(value)}</text>` +
-    `<text x="${cx}" y="${cy + LABEL_BASELINE}" text-anchor="middle" ` +
+    `<text x="${x}" y="${round(cy + VALUE_BASELINE)}" text-anchor="middle" ` +
+    `font-size="${fontSize}" fill="${spec.valueColor}">${escapeXml(value)}</text>` +
+    `<text x="${x}" y="${round(cy + LABEL_BASELINE)}" text-anchor="middle" ` +
     `font-size="${LABEL_FONT_SIZE}" fill="${style.muted}">${escapeXml(spec.label)}</text>` +
-    `<text x="${cx}" y="${cy + SUBTITLE_BASELINE}" text-anchor="middle" ` +
+    `<text x="${x}" y="${round(cy + SUBTITLE_BASELINE)}" text-anchor="middle" ` +
     `font-size="${SUBTITLE_FONT_SIZE}" fill="${style.muted}" opacity="0.7">` +
     `${escapeXml(spec.subtitle)}</text>`
   )
 }
+
+/** Coordinates come out of the layout as reals; two decimals is plenty. */
+const round = (n: number) => Math.round(n * 100) / 100
 
 /**
  * Background plate plus the scanline texture.
@@ -204,33 +214,33 @@ function ringText(spec: RingSpec, cx: number, cy: number, style: StyleParams): s
  * scales the card down. The id is document-local; each card is its own `<img>`
  * document, so two cards in one README cannot collide.
  */
-function background(width: number, style: StyleParams): string {
-  const plate = `<rect width="${width}" height="${CARD_HEIGHT}" rx="${style.radius}" fill="${style.bg}"/>`
+function background({ width, height }: CardLayout, style: StyleParams): string {
+  const plate = `<rect width="${width}" height="${height}" rx="${style.radius}" fill="${style.bg}"/>`
   if (!style.scanlines) return plate
 
   return (
     `<defs><pattern id="scanlines" width="4" height="4" patternUnits="userSpaceOnUse">` +
     `<rect width="4" height="2" fill="${style.accent}" opacity="0.05"/></pattern></defs>` +
     plate +
-    `<rect width="${width}" height="${CARD_HEIGHT}" rx="${style.radius}" fill="url(#scanlines)"/>`
+    `<rect width="${width}" height="${height}" rx="${style.radius}" fill="url(#scanlines)"/>`
   )
 }
 
-function frame(width: number, style: StyleParams): string {
+function frame({ width, height }: CardLayout, style: StyleParams): string {
   if (style.border === 'none' || style.border === 'transparent') return ''
   // Concentric with the outer corner: the inset shrinks the radius by the same
   // amount, so the two curves stay parallel instead of drifting apart.
   const radius = Math.max(0, style.radius - 4)
   return (
     `<rect x="${FRAME_INSET}" y="${FRAME_INSET}" width="${width - FRAME_INSET * 2}" ` +
-    `height="${CARD_HEIGHT - FRAME_INSET * 2}" rx="${radius}" fill="none" ` +
+    `height="${height - FRAME_INSET * 2}" rx="${radius}" fill="none" ` +
     `stroke="${style.border}" stroke-width="0.5"/>`
   )
 }
 
-function credit(width: number, style: StyleParams): string {
+function credit({ width, height }: CardLayout, style: StyleParams): string {
   return (
-    `<text x="${width - FRAME_INSET / 2}" y="${CARD_HEIGHT - 3}" text-anchor="end" ` +
+    `<text x="${width - FRAME_INSET / 2}" y="${height - 3}" text-anchor="end" ` +
     `font-size="7" fill="${style.muted}" opacity="0.55">phosphor-stats</text>`
   )
 }

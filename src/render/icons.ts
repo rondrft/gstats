@@ -29,7 +29,8 @@ const SOURCE_SIZE = 24
  */
 const SCALE = 0.7
 
-const RENDERED_SIZE = SOURCE_SIZE * SCALE
+/** Side of the glyph's box once scaled. The layout measures the card from here. */
+export const ICON_SIZE = SOURCE_SIZE * SCALE
 
 /**
  * Renders an icon centred on the ring's gap at twelve o'clock.
@@ -39,7 +40,7 @@ const RENDERED_SIZE = SOURCE_SIZE * SCALE
  * expressed in final user units.
  */
 export function icon(name: IconName, cx: number, cy: number, color: string): string {
-  const half = RENDERED_SIZE / 2
+  const half = ICON_SIZE / 2
   const x = Math.round((cx - half) * 100) / 100
   const y = Math.round((cy - RADIUS - half) * 100) / 100
   return (

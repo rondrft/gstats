@@ -33,15 +33,15 @@ Set one with `&theme=`. Individual colours can be overridden on top of any theme
 
 <table>
 <tr><td><code>phosphor</code> <em>(default)</em></td></tr>
-<tr><td><img src="docs/assets/theme-phosphor.svg" alt="phosphor theme" width="600"></td></tr>
+<tr><td><img src="docs/assets/theme-phosphor.svg" alt="phosphor theme"></td></tr>
 <tr><td><code>?theme=amber</code></td></tr>
-<tr><td><img src="docs/assets/theme-amber.svg" alt="amber theme" width="600"></td></tr>
+<tr><td><img src="docs/assets/theme-amber.svg" alt="amber theme"></td></tr>
 <tr><td><code>?theme=ice</code></td></tr>
-<tr><td><img src="docs/assets/theme-ice.svg" alt="ice theme" width="600"></td></tr>
+<tr><td><img src="docs/assets/theme-ice.svg" alt="ice theme"></td></tr>
 <tr><td><code>?theme=mono</code></td></tr>
-<tr><td><img src="docs/assets/theme-mono.svg" alt="mono theme" width="600"></td></tr>
+<tr><td><img src="docs/assets/theme-mono.svg" alt="mono theme"></td></tr>
 <tr><td><code>?theme=light</code></td></tr>
-<tr><td><img src="docs/assets/theme-light.svg" alt="light theme" width="600"></td></tr>
+<tr><td><img src="docs/assets/theme-light.svg" alt="light theme"></td></tr>
 </table>
 
 ## Variants

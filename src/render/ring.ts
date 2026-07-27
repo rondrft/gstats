@@ -62,9 +62,13 @@ export interface RingParts {
 
 export function ring({ cx, cy, pct, color, index, animate }: RingOptions): RingParts {
   const filled = round(ARC * Math.min(1, Math.max(0, pct)))
-  const rotation = `rotate(-90 ${cx} ${cy})`
+  // Centres arrive from the layout as reals, so they are rounded here rather
+  // than assumed to be whole numbers.
+  const x = round(cx)
+  const y = round(cy)
+  const rotation = `rotate(-90 ${x} ${y})`
   const restingOffset = round(-HALF_GAP)
-  const common = `cx="${cx}" cy="${cy}" r="${RADIUS}" fill="none" stroke-width="${STROKE_WIDTH}"`
+  const common = `cx="${x}" cy="${y}" r="${RADIUS}" fill="none" stroke-width="${STROKE_WIDTH}"`
 
   // The track's dash pattern has period `CIRCUMFERENCE`, so it repeats exactly
   // once around the circle and the single gap lands at the top.

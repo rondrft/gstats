@@ -12,10 +12,8 @@
  */
 
 import type { LanguageStat } from '../github/types'
+import { LANGS_FONT_SIZE, type LangsContent, type LangsPlacement, langsTextWidth } from './layout'
 import { escapeXml } from './xml'
-
-export const LANGS_FONT_SIZE = 11
-export const LANGS_LINE_HEIGHT = 20
 
 /** Widest bar, in cells. Six reads as a bar without crowding the percentage. */
 const MAX_BLOCKS = 6
@@ -24,6 +22,13 @@ const BLOCK = '█'
 
 /** Width of the name column, in characters. */
 const NAME_WIDTH = 5
+
+/**
+ * Cells in one row: the name column, the bar, the percentage, and a space
+ * between each. Every row is this wide by construction, which is what makes the
+ * columns line up and what lets the block be measured without rendering it.
+ */
+const ROW_CELLS = NAME_WIDTH + 1 + MAX_BLOCKS + 1 + 4
 
 /**
  * Short forms for the languages that show up most often. The convention is the
@@ -77,11 +82,25 @@ export function abbreviate(language: string): string {
   return language.toLowerCase().slice(0, 3)
 }
 
+/**
+ * Rows and width the block will occupy, without building any markup.
+ *
+ * The layout has to know how much room to reserve before it can decide where
+ * the block goes, so measurement is separated from rendering. Both variants are
+ * the same width: the `bars` columns are placed on the same cell grid the
+ * `blocks` characters sit on.
+ */
+export function measureLangs(languages: readonly LanguageStat[], emptyLabel: string): LangsContent {
+  if (languages.length === 0) {
+    return { lineCount: 1, width: langsTextWidth(emptyLabel) }
+  }
+  return { lineCount: languages.length, width: langsTextWidth(' '.repeat(ROW_CELLS)) }
+}
+
 interface LangsOptions {
   languages: readonly LanguageStat[]
-  x: number
-  /** Vertical centre of the block. */
-  cy: number
+  /** Where the layout decided the block goes. */
+  placement: LangsPlacement
   text: string
   muted: string
   /** Used for `bars` when GitHub has no colour on file for a language. */
@@ -93,25 +112,25 @@ interface LangsOptions {
 
 export function langsBlock({
   languages,
-  x,
-  cy,
+  placement,
   text,
   muted,
   fallbackColor,
   style,
   emptyLabel,
 }: LangsOptions): string {
-  const font = `font-size="${LANGS_FONT_SIZE}"`
+  const { x, firstBaseline, lineHeight } = placement
 
   if (languages.length === 0) {
-    return `<text x="${x}" y="${cy + 4}" ${font} fill="${muted}">${escapeXml(emptyLabel)}</text>`
+    return (
+      `<text x="${round(x)}" y="${round(firstBaseline)}" font-size="${LANGS_FONT_SIZE}" ` +
+      `fill="${muted}">${escapeXml(emptyLabel)}</text>`
+    )
   }
-
-  const firstBaseline = cy - ((languages.length - 1) * LANGS_LINE_HEIGHT) / 2 + 4
 
   return languages
     .map((language, index) => {
-      const y = firstBaseline + index * LANGS_LINE_HEIGHT
+      const y = round(firstBaseline + index * lineHeight)
       return style === 'bars'
         ? barLine(language, x, y, text, muted, fallbackColor)
         : blockLine(language, x, y, text)
@@ -126,7 +145,7 @@ function blockLine(language: LanguageStat, x: number, y: number, text: string): 
   const percent = `${Math.round(language.pct * 100)}`.padStart(3)
   const line = `${name} ${bar} ${percent}%`
   return (
-    `<text x="${x}" y="${y}" font-size="${LANGS_FONT_SIZE}" fill="${text}" ` +
+    `<text x="${round(x)}" y="${y}" font-size="${LANGS_FONT_SIZE}" fill="${text}" ` +
     `xml:space="preserve">${escapeXml(line)}</text>`
   )
 }
@@ -139,8 +158,12 @@ function blockCount(pct: number): number {
   return Math.max(1, Math.min(MAX_BLOCKS, Math.round(pct * MAX_BLOCKS)))
 }
 
-/** Cell width used to place the `bars` variant's columns, in user units. */
-const CELL = LANGS_FONT_SIZE * 0.6
+/**
+ * One character cell, in user units. The `bars` variant places its columns on
+ * the same grid the `blocks` characters land on, so the two styles occupy
+ * identical space and the layout can measure either one the same way.
+ */
+const CELL = langsTextWidth(' ')
 
 const BAR_WIDTH = MAX_BLOCKS * CELL
 const BAR_HEIGHT = 7
@@ -161,11 +184,11 @@ function barLine(
   const percentX = barX + BAR_WIDTH + CELL
 
   return (
-    `<text x="${x}" y="${y}" font-size="${LANGS_FONT_SIZE}" fill="${text}">${escapeXml(name)}</text>` +
-    `<rect x="${barX}" y="${y - BAR_HEIGHT}" width="${round(BAR_WIDTH)}" height="${BAR_HEIGHT}" ` +
-    `rx="1" fill="${muted}" opacity="0.25"/>` +
-    `<rect x="${barX}" y="${y - BAR_HEIGHT}" width="${round(filled)}" height="${BAR_HEIGHT}" ` +
-    `rx="1" fill="${color}"/>` +
+    `<text x="${round(x)}" y="${y}" font-size="${LANGS_FONT_SIZE}" fill="${text}">${escapeXml(name)}</text>` +
+    `<rect x="${round(barX)}" y="${round(y - BAR_HEIGHT)}" width="${round(BAR_WIDTH)}" ` +
+    `height="${BAR_HEIGHT}" rx="1" fill="${muted}" opacity="0.25"/>` +
+    `<rect x="${round(barX)}" y="${round(y - BAR_HEIGHT)}" width="${round(filled)}" ` +
+    `height="${BAR_HEIGHT}" rx="1" fill="${color}"/>` +
     `<text x="${round(percentX)}" y="${y}" font-size="${LANGS_FONT_SIZE}" fill="${text}">${percent}</text>`
   )
 }

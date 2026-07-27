@@ -44,7 +44,9 @@ src/
     languages.ts
     types.ts        shapes shared across layers
   render/
-    card.ts         composition and layout
+    card.ts         composition
+    layout.ts       measures the content and centres it
+    metrics.ts      monospace text measurement
     ring.ts         ring geometry
     icons.ts        embedded Tabler paths
     langs.ts        language block
@@ -72,6 +74,15 @@ reader cannot see an error body, so the card has to render regardless.
 **Geometry is derived, not typed in.** `src/render/ring.ts` computes the arc
 lengths from the radius and the gap. If you find yourself writing a literal that
 depends on another literal, derive it instead.
+
+**Nothing outside `layout.ts` decides where anything goes.** The card is
+measured first and drawn second: `layoutCard` returns the width, the ring
+centres, the shared axis and the language block's placement, and `card.ts`
+consumes them. That is what keeps the composition centred when a label changes,
+a locale changes or a module is hidden — a coordinate written anywhere else is a
+piece that will not move with the rest. If you add something to the card, teach
+the layout to measure it. `test/layout.test.ts` asserts that the four margins
+around the content box stay equal in every configuration.
 
 **Streak arithmetic is pure.** `computeStreaks` takes the calendar and the
 reference day as arguments and reads no clock. It is the piece most likely to be

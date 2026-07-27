@@ -135,7 +135,7 @@ export function landingPage(origin: string): string {
   <p class="tagline">GitHub stats cards for your README. Contributions, streaks and languages, rendered as SVG on the edge.</p>
 
   <div class="hero">
-    <img src="/api?username=${DEMO_USER}" alt="Example stats card" width="600" height="150">
+    <img src="/api?username=${DEMO_USER}" alt="Example stats card">
   </div>
 
   <div class="badges">
@@ -211,7 +211,7 @@ ${THEME_NAMES.map((name) => `          <option value="${name}">${name}</option>`
 ${THEME_NAMES.map(
   (name) => `    <figure>
       <figcaption>?theme=${name}</figcaption>
-      <img src="/api?username=${DEMO_USER}&amp;theme=${name}" alt="${name} theme" loading="lazy" width="600" height="150">
+      <img src="/api?username=${DEMO_USER}&amp;theme=${name}" alt="${name} theme" loading="lazy">
     </figure>`,
 ).join('\n')}
   </div>

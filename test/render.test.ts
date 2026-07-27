@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { renderCard } from '../src/render/card'
 import { renderErrorCard } from '../src/render/error-card'
+import { CARD_HEIGHT } from '../src/render/layout'
 import { ARC, CIRCUMFERENCE } from '../src/render/ring'
 import { paramsFixture, statsFixture } from './helpers/fixtures'
 
@@ -19,8 +20,13 @@ describe('document', () => {
 
     // GitHub stretches an SVG that only carries a viewBox, so both have to be
     // present and agree.
-    expect(svg).toMatch(/^<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg" width="600" height="150" /)
-    expect(svg).toContain('viewBox="0 0 600 150"')
+    const dimensions = /^<svg [^>]*width="(\d+)" height="(\d+)" viewBox="0 0 (\d+) (\d+)"/.exec(svg)
+
+    expect(dimensions).not.toBeNull()
+    const [, width, height, boxWidth, boxHeight] = dimensions ?? []
+    expect(boxWidth).toBe(width)
+    expect(boxHeight).toBe(height)
+    expect(Number(height)).toBe(CARD_HEIGHT)
   })
 
   it('is well formed enough to parse as XML', () => {
@@ -157,25 +163,54 @@ describe('animation', () => {
   })
 })
 
+/**
+ * The exact coordinates belong to `layout.test.ts`, which measures them
+ * directly. What matters here is that the document the renderer emits actually
+ * moves when the layout says it should.
+ */
 describe('layout', () => {
-  it('narrows the card instead of leaving holes when modules are hidden', () => {
-    const full = renderCard(statsFixture(), paramsFixture())
-    const rings = renderCard(statsFixture(), paramsFixture('username=x&hide=langs'))
-    const one = renderCard(statsFixture(), paramsFixture('username=x&hide=streak,best,langs'))
+  const widthOf = (svg: string) => Number(/ width="(\d+)"/.exec(svg)?.[1] ?? 0)
+  const ringCentres = (svg: string) =>
+    [...svg.matchAll(/<circle cx="([\d.]+)"/g)].map((match) => Number(match[1]))
 
-    expect(full).toContain('width="600"')
-    expect(rings).toContain('width="476"')
-    expect(one).toContain('width="236"')
+  it('narrows the card instead of leaving holes when modules are hidden', () => {
+    const full = widthOf(renderCard(statsFixture(), paramsFixture()))
+    const rings = widthOf(renderCard(statsFixture(), paramsFixture('username=x&hide=langs')))
+    const one = widthOf(
+      renderCard(statsFixture(), paramsFixture('username=x&hide=streak,best,langs')),
+    )
+
+    expect(rings).toBeLessThan(full)
+    expect(one).toBeLessThan(rings)
   })
 
   it('closes the gap left by a hidden middle ring', () => {
-    const svg = renderCard(statsFixture(), paramsFixture('username=x&hide=streak'))
+    const all = ringCentres(renderCard(statsFixture(), paramsFixture()))
+    const hidden = ringCentres(renderCard(statsFixture(), paramsFixture('username=x&hide=streak')))
 
-    // Two rings remain and they occupy the first two slots, not the first and
-    // the third.
-    expect(svg).toContain('cx="118"')
-    expect(svg).toContain('cx="238"')
-    expect(svg).not.toContain('cx="358"')
+    // Each ring contributes a track and a progress circle at the same centre.
+    const distinct = (centres: number[]) => [...new Set(centres)]
+
+    expect(distinct(all)).toHaveLength(3)
+    expect(distinct(hidden)).toHaveLength(2)
+
+    // The two survivors are adjacent, at the same pitch the three used — the
+    // record ring moved up into the streak's place rather than leaving a hole.
+    const [firstOfThree, secondOfThree] = distinct(all)
+    const [firstOfTwo, secondOfTwo] = distinct(hidden)
+    const pitch = (secondOfThree ?? 0) - (firstOfThree ?? 0)
+
+    expect((secondOfTwo ?? 0) - (firstOfTwo ?? 0)).toBeCloseTo(pitch, 2)
+  })
+
+  it('centres the content rather than the ring axis', () => {
+    const svg = renderCard(statsFixture(), paramsFixture())
+    const cy = Number(/<circle cx="[\d.]+" cy="([\d.]+)"/.exec(svg)?.[1] ?? 0)
+
+    // The icons sit above the arcs and nothing balances them below, so a
+    // correctly centred card puts the ring axis above the halfway line.
+    expect(cy).toBeGreaterThan(0)
+    expect(cy).toBeLessThan(CARD_HEIGHT / 2)
   })
 })
 

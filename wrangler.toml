@@ -15,8 +15,8 @@ enabled = true
 # then paste the returned ids below. The ids are not secrets.
 [[kv_namespaces]]
 binding = "STATS_CACHE"
-id = "0000000000000000000000000000000f"
-preview_id = "0000000000000000000000000000000f"
+id = "073f428dd72448d19a9063f087274b2e"
+preview_id = "57d7366d6d83441abf4cadd1344d2e2c"
 
 [vars]
 # Surfaced by /health so a deployed instance can be identified at a glance.
