@@ -167,18 +167,50 @@ describe('cards', () => {
 
   /**
    * The reason the cache stores data rather than rendered SVG: a second reader
-   * asking for a different theme must not cost another round of API calls.
+   * asking for a different theme must not cost another round of API calls, and
+   * must still get a card painted in the theme they asked for.
    */
-  it('reuses the cached data across styles', async () => {
+  it('reuses one cache entry across themes', async () => {
     const github = stubGitHub()
 
-    await get('/api?username=themed')
+    const phosphor = await get('/api?username=themed')
     const callsAfterFirst = github.calls
-    const themed = await get('/api?username=themed&theme=amber&radius=0&animate=false')
 
-    expect(themed.headers.get('x-cache')).toBe('HIT')
+    const amber = await get('/api?username=themed&theme=amber')
+    const ice = await get('/api?username=themed&theme=ice&radius=0&animate=false&locale=es')
+
+    // Neither variant went upstream.
+    expect(phosphor.headers.get('x-cache')).toBe('MISS')
+    expect(amber.headers.get('x-cache')).toBe('HIT')
+    expect(ice.headers.get('x-cache')).toBe('HIT')
     expect(github.calls).toBe(callsAfterFirst)
-    await expect(themed.text()).resolves.toContain('#0F0A02')
+
+    // Each was nonetheless rendered fresh, from the one set of cached figures.
+    await expect(amber.text()).resolves.toContain('#0F0A02')
+    const iceBody = await ice.text()
+    expect(iceBody).toContain('#050B14')
+    expect(iceBody).toContain('contribuciones')
+    expect(iceBody).not.toContain('<style>')
+  })
+
+  /**
+   * KV holds figures, not pixels, so a release that changes the renderer takes
+   * effect on the next request rather than waiting out a TTL. What it cannot
+   * reach is the copy Camo and the reader's browser are holding, which is
+   * governed by `Cache-Control` and documented as a known limitation.
+   */
+  it('re-renders a cached profile on every request', async () => {
+    const github = stubGitHub()
+
+    await get('/api?username=rerendered')
+    const callsAfterFirst = github.calls
+    const hidden = await get('/api?username=rerendered&show_credit=true')
+
+    expect(hidden.headers.get('x-cache')).toBe('HIT')
+    expect(github.calls).toBe(callsAfterFirst)
+    // A render-only parameter changed the output of a cache hit, which it could
+    // not do if the entry held a finished document.
+    await expect(hidden.text()).resolves.toContain('phosphor-stats')
   })
 
   it('refetches when a parameter changes which data is needed', async () => {

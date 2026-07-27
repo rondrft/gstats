@@ -42,10 +42,12 @@ export interface StatsDeps {
   rateLimits: KvRateLimitStore
   /** Epoch milliseconds. Injected so tests control time. */
   now: number
+  /** Deployed build, mixed into the cache key so a release retires its entries. */
+  build: string
 }
 
 export async function getStats(deps: StatsDeps, params: CardParams): Promise<StatsResult> {
-  const key = cacheKey(params)
+  const key = cacheKey(params, deps.build)
   const cached = await deps.cache.read(key)
 
   if (cached !== null && isFresh(cached, deps.now)) {

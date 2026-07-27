@@ -89,10 +89,23 @@ reference day as arguments and reads no clock. It is the piece most likely to be
 wrong in subtle ways, so it carries the densest tests. Anything that changes it
 needs a test that fails before the change.
 
-**The cache stores data, not SVG.** Style parameters are deliberately absent
-from the cache key, so a request in a different theme reuses the entry an earlier
-request paid for. A new parameter belongs in the key only if it changes what is
-fetched from GitHub.
+**The cache stores data, not SVG.** KV holds serialised `StatsData`; the card is
+built from it on every request. Style parameters are therefore absent from the
+cache key, and a request in a different theme reuses the entry an earlier request
+paid for. A new parameter belongs in the key only if it changes what is fetched
+from GitHub.
+
+One consequence is worth knowing before you go looking for a bug: a release that
+changes the renderer takes effect on the next request, because nothing rendered
+was ever stored. What it cannot reach is the copy Camo and the reader's browser
+are already holding — that is governed by `Cache-Control`, not by KV, and it is
+the *only* reason a card can look stale after a deploy.
+
+**The cache key carries the build.** `SERVICE_VERSION` is part of the key, so a
+deploy starts from an empty cache and cannot read entries written against an
+older shape of `StatsData`. Deploys pass the commit they were built from. The
+cost is a burst of upstream traffic after each release, proportional to how many
+distinct profiles are active, which is worth remembering on a busy instance.
 
 ## Adding a theme
 

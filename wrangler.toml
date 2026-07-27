@@ -19,9 +19,17 @@ id = "073f428dd72448d19a9063f087274b2e"
 preview_id = "57d7366d6d83441abf4cadd1344d2e2c"
 
 [vars]
-# Surfaced by /health so a deployed instance can be identified at a glance.
-# Bump alongside the package.json version.
-SERVICE_VERSION = "1.0.0"
+# Identifies the running build. Reported by /health, and mixed into the cache key
+# so that a deploy starts from an empty cache instead of reading entries written
+# by the previous release.
+#
+# This value is only the local-development fallback. Real deploys override it
+# with the commit they were built from:
+#
+#   wrangler deploy --var SERVICE_VERSION:$(git rev-parse --short HEAD)
+#
+# which `pnpm deploy` and the deploy workflow both do.
+SERVICE_VERSION = "dev"
 
 # GITHUB_TOKEN is a secret and must never appear here. Set it with:
 #   wrangler secret put GITHUB_TOKEN

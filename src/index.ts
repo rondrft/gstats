@@ -20,8 +20,17 @@ export interface Env {
   STATS_CACHE: KVNamespace
   /** Set with `wrangler secret put GITHUB_TOKEN`. */
   GITHUB_TOKEN?: string
+  /**
+   * Identifier of the running build. Deploys pass the commit it was built from;
+   * `wrangler dev` falls back to the placeholder in `wrangler.toml`. It labels
+   * the instance at `/health` and namespaces the cache, so a release starts from
+   * a clean one.
+   */
   SERVICE_VERSION?: string
 }
+
+/** Used when nothing set a version, which in practice means local development. */
+const UNKNOWN_VERSION = 'dev'
 
 const SVG_CONTENT_TYPE = 'image/svg+xml; charset=utf-8'
 
@@ -74,6 +83,7 @@ async function handleCard(url: URL, env: Env): Promise<Response> {
         cache: new KvStatsCache(env.STATS_CACHE),
         rateLimits: new KvRateLimitStore(env.STATS_CACHE),
         now: Date.now(),
+        build: env.SERVICE_VERSION ?? UNKNOWN_VERSION,
       },
       parsed.params,
     )
@@ -121,7 +131,7 @@ async function handleHealth(env: Env): Promise<Response> {
   return Response.json(
     {
       status: 'ok',
-      version: env.SERVICE_VERSION ?? 'unknown',
+      version: env.SERVICE_VERSION ?? UNKNOWN_VERSION,
       tokenConfigured: env.GITHUB_TOKEN !== undefined && env.GITHUB_TOKEN.length > 0,
       rateLimit: rateLimits ?? null,
     },

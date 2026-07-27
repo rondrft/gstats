@@ -137,19 +137,29 @@ fresh clone does not collect a red mark on every push.
 `GITHUB_TOKEN` stays a Wrangler secret; the deploy never touches it, and it is
 never exposed to a workflow.
 
+Both the workflow and `pnpm deploy` pass the commit they were built from as
+`SERVICE_VERSION`. That value identifies the instance at `/health` and forms
+part of the cache key, so a release cannot read entries written by the one
+before it. Expect a burst of upstream traffic right after each deploy, in
+proportion to how many distinct profiles are active — every one of them is a
+cache miss until it is fetched again.
+
 ## Monitoring
 
-`/health` reports the version, whether a token is configured, and the last
-observed rate limit window:
+`/health` reports the build, whether a token is configured, and the last observed
+rate limit window:
 
 ```json
 {
   "status": "ok",
-  "version": "1.0.0",
+  "version": "a8cd332",
   "tokenConfigured": true,
   "rateLimit": { "remaining": 4873, "limit": 5000, "reset": 1785000000, "observedAt": 1784996400 }
 }
 ```
+
+`version` is the deployed commit, or `dev` under `wrangler dev`. It is the
+quickest way to tell whether the instance is running what you think it is.
 
 If `remaining` regularly approaches zero, the instance is serving more distinct
 profiles than one token can support. Raise `cache_seconds` on the busiest cards

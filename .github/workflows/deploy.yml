@@ -52,6 +52,10 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
 
+      # The commit becomes the build identifier: it labels the instance at
+      # /health and namespaces the cache, so the release does not read entries
+      # written by its predecessor.
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy --var SERVICE_VERSION:${{ github.sha }}

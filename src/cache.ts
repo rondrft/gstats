@@ -7,15 +7,20 @@
  * instead of triggering a fresh round of GitHub calls. That single decision is
  * what keeps a shared hourly quota viable.
  *
- * Entries carry their own timestamp and are written with a TTL beyond the one
- * the caller asked for, so an exhausted quota can still be answered with a
- * slightly stale card rather than an error (see `readStale`).
+ * Entries carry their own freshness deadline and are written with a KV TTL
+ * beyond it, so an exhausted quota can still be answered from an expired entry
+ * rather than with an error — see the fallback in `stats.ts`.
  */
 
 import type { RateLimitState, StatsData } from './github/types'
 import type { DataParams } from './params'
 
-/** Bumped whenever the shape of `StatsData` changes, to orphan old entries. */
+/**
+ * Namespace for everything this service writes, so a key can be recognised at a
+ * glance in the KV browser. Entries are retired by the build component of the
+ * key rather than by editing this, and it only needs to change if the key format
+ * itself does.
+ */
 const SCHEMA_VERSION = 'v1'
 
 /**
@@ -37,21 +42,31 @@ export interface StatsCache {
 }
 
 /**
- * Cache key.
+ * Cache key: `v1:<build>:<login>:<hash of the data-shaping parameters>`.
  *
- * Only inputs that change the *bytes we fetch* participate: the username, how
- * many languages are ranked, which are excluded, and which modules are hidden
- * (hiding a module skips its query entirely). Style parameters are deliberately
- * absent — including them would fragment the cache by theme for no benefit.
+ * Only inputs that change the *bytes we fetch* participate in the hash: the
+ * username, how many languages are ranked, which are excluded, and which modules
+ * are hidden (hiding a module skips its query entirely). Style parameters are
+ * deliberately absent — the entry holds data, not pixels, so a request in a
+ * different theme reuses whatever an earlier request already paid for.
+ *
+ * The build component is the deployed `SERVICE_VERSION`. Including it retires
+ * every entry on deploy, which removes the standing hazard of a release that
+ * changes the shape of `StatsData` and then reads yesterday's entries back into
+ * the new type. The manual `SCHEMA_VERSION` below no longer has to be remembered.
+ *
+ * It is not free: the first request for each profile after a deploy is a miss,
+ * so a release spends fresh GitHub quota proportional to how many distinct
+ * profiles are active. On a busy instance that is the cost worth watching.
  */
-export function cacheKey(params: DataParams): string {
+export function cacheKey(params: DataParams, build: string): string {
   const dataShape = [
     `l=${params.langsCount}`,
     `x=${[...params.excludeLangs].sort().join('|')}`,
     `h=${[...params.hide].sort().join('|')}`,
   ].join(';')
 
-  return `${SCHEMA_VERSION}:${params.username.toLowerCase()}:${fingerprint(dataShape)}`
+  return [SCHEMA_VERSION, build, params.username.toLowerCase(), fingerprint(dataShape)].join(':')
 }
 
 /**
@@ -121,6 +136,11 @@ export function isFresh(entry: CacheEntry, now: number): boolean {
  * to act on them. This is the "are we running out?" signal that lets the service
  * fall back to stale cards before it starts failing, and it is what `/health`
  * reports.
+ *
+ * Deliberately *not* versioned by build. A deploy empties the stats cache and so
+ * causes a burst of upstream traffic; forgetting the quota reading at the same
+ * moment would blind the fallback exactly when it is most needed. The reading
+ * describes GitHub's state, not ours, and outlives any release.
  */
 const RATE_LIMIT_KEY = `${SCHEMA_VERSION}:rate-limit`
 
