@@ -1,0 +1,173 @@
+# Self-hosting
+
+The public instance shares one GitHub token across everyone who uses it. That is
+fine until it is not: 5,000 requests per hour is a hard ceiling, and it is the
+reason most services of this kind eventually fall over. Running your own gives
+you a budget nobody else can spend.
+
+Everything below fits in the Cloudflare Workers free tier.
+
+## Prerequisites
+
+- Node 20 or newer, and [pnpm](https://pnpm.io).
+- A Cloudflare account. The free plan is enough.
+- A GitHub account, for the token.
+
+## 1. Clone and install
+
+```bash
+git clone https://github.com/rondrft/phosphor-stats
+cd phosphor-stats
+pnpm install
+```
+
+## 2. Create a GitHub token
+
+The service only ever reads public data, so the token needs **no scopes at all**.
+An unscoped token still lifts you from 60 requests per hour to 5,000.
+
+**Fine-grained token** (preferred):
+
+1. Go to **Settings → Developer settings → Personal access tokens → Fine-grained tokens**.
+2. **Generate new token**. Give it a name and an expiry.
+3. Repository access: **Public repositories (read-only)**.
+4. Leave every permission at *No access*.
+5. Generate, and copy the value — GitHub shows it once.
+
+**Classic token** works too: create one and tick **nothing**. Do not grant `repo`.
+
+> Set a calendar reminder for the expiry date. An expired token turns every card
+> into an "upstream error" card, and the only symptom is that the images change.
+
+## 3. Log in to Cloudflare
+
+```bash
+pnpm wrangler login
+```
+
+## 4. Create the KV namespace
+
+The cache lives in Workers KV. Create the production and preview namespaces:
+
+```bash
+pnpm wrangler kv namespace create STATS_CACHE
+pnpm wrangler kv namespace create STATS_CACHE --preview
+```
+
+Each command prints an id. Put them in `wrangler.toml`, replacing the
+placeholders:
+
+```toml
+[[kv_namespaces]]
+binding = "STATS_CACHE"
+id = "paste-the-production-id-here"
+preview_id = "paste-the-preview-id-here"
+```
+
+These ids are not secrets and are safe to commit.
+
+## 5. Store the token
+
+```bash
+pnpm wrangler secret put GITHUB_TOKEN
+```
+
+Paste the token at the prompt. It is encrypted by Cloudflare and never appears in
+the repository, in `wrangler.toml`, or in any log.
+
+For local development, copy `.dev.vars.example` to `.dev.vars` and put the token
+there instead. That file is gitignored.
+
+## 6. Deploy
+
+```bash
+pnpm deploy
+```
+
+Wrangler prints the URL, something like
+`https://phosphor-stats.<your-subdomain>.workers.dev`. Check it:
+
+```bash
+curl -s https://phosphor-stats.<your-subdomain>.workers.dev/health
+curl -sI "https://phosphor-stats.<your-subdomain>.workers.dev/api?username=YOUR_LOGIN" | grep -i x-cache
+```
+
+The first request reports `X-Cache: MISS`, the second `HIT`.
+
+Then point your README at your own host:
+
+```markdown
+![My GitHub stats](https://phosphor-stats.<your-subdomain>.workers.dev/api?username=YOUR_LOGIN)
+```
+
+## 7. Protect your quota
+
+A public URL that spends your GitHub budget is worth a rate limit. In the
+Cloudflare dashboard, under **Security → WAF → Rate limiting rules**, add a rule
+on the Worker's hostname — something like 60 requests per minute per IP is
+generous for real README traffic and stops a scraper from draining an hour of
+quota in a minute.
+
+Cache hits never touch GitHub, so the effective limit is much higher than it
+looks.
+
+## Running locally
+
+```bash
+pnpm dev        # wrangler dev, with a local KV simulation
+pnpm test       # the suite, inside workerd
+pnpm typecheck
+pnpm lint
+```
+
+`pnpm dev` serves the landing page and the API on `http://localhost:8787`.
+
+## Continuous deployment
+
+`.github/workflows/deploy.yml` deploys on every push to `main`. To use it, add
+one repository secret:
+
+- `CLOUDFLARE_API_TOKEN` — created in the Cloudflare dashboard under **My
+  Profile → API Tokens**, from the *Edit Cloudflare Workers* template.
+
+`GITHUB_TOKEN` stays a Wrangler secret; the deploy never touches it.
+
+## Monitoring
+
+`/health` reports the version, whether a token is configured, and the last
+observed rate limit window:
+
+```json
+{
+  "status": "ok",
+  "version": "1.0.0",
+  "tokenConfigured": true,
+  "rateLimit": { "remaining": 4873, "limit": 5000, "reset": 1785000000, "observedAt": 1784996400 }
+}
+```
+
+If `remaining` regularly approaches zero, the instance is serving more distinct
+profiles than one token can support. Raise `cache_seconds` on the busiest cards
+first; if that is not enough, the next step is a GitHub App, where every
+installation carries its own 5,000 per hour. The codebase is ready for it —
+authentication is isolated behind the `TokenProvider` interface in
+`src/github/client.ts`, and swapping it out means adding one implementation and
+changing one line in `src/index.ts`.
+
+## Troubleshooting
+
+**Every card says `GITHUB_TOKEN is not set`.** The secret was not stored. Run
+`pnpm wrangler secret put GITHUB_TOKEN` again and redeploy.
+
+**Every card says `upstream error`.** Usually an expired or revoked token. Check
+with `curl -H "authorization: bearer <token>" https://api.github.com/rate_limit`.
+
+**Cards say `rate limited`.** The hourly window is exhausted. `/health` shows
+when it resets. If it happens often, see *Monitoring* above.
+
+**The card in my README will not update.** GitHub's image proxy is still serving
+its own copy. Wait it out — the card itself is already current, which you can
+confirm by opening the `/api` URL directly.
+
+**`wrangler deploy` complains about the KV id.** The placeholder in
+`wrangler.toml` was not replaced with the id from step 4.
