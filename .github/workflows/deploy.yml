@@ -11,12 +11,29 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  # Secrets are not readable from a job-level `if`, so the check has to happen
+  # inside a job. Without it, a clone that has not set up Cloudflare yet would
+  # get a red X on every push to main for a deploy it never asked for.
+  guard:
     runs-on: ubuntu-latest
-    # Only the repository that owns the public instance should publish. A fork
-    # that wants continuous deployment removes this line and adds its own
-    # CLOUDFLARE_API_TOKEN secret.
-    if: github.repository == 'rondrft/phosphor-stats'
+    outputs:
+      configured: ${{ steps.check.outputs.configured }}
+    steps:
+      - id: check
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          if [ -z "$CLOUDFLARE_API_TOKEN" ]; then
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CLOUDFLARE_API_TOKEN is not set. Skipping deploy — see docs/self-hosting.md."
+          else
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  deploy:
+    needs: guard
+    if: needs.guard.outputs.configured == 'true'
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
 

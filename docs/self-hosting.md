@@ -131,7 +131,11 @@ one repository secret:
 - `CLOUDFLARE_API_TOKEN` — created in the Cloudflare dashboard under **My
   Profile → API Tokens**, from the *Edit Cloudflare Workers* template.
 
-`GITHUB_TOKEN` stays a Wrangler secret; the deploy never touches it.
+Until that secret exists the workflow skips itself rather than failing, so a
+fresh clone does not collect a red mark on every push.
+
+`GITHUB_TOKEN` stays a Wrangler secret; the deploy never touches it, and it is
+never exposed to a workflow.
 
 ## Monitoring
 
