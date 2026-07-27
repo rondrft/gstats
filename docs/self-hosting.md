@@ -9,7 +9,8 @@ Everything below fits in the Cloudflare Workers free tier.
 
 ## Prerequisites
 
-- Node 20 or newer, and [pnpm](https://pnpm.io).
+- Node 22.13 or newer, and [pnpm](https://pnpm.io). The Worker itself has no Node
+  dependency; this is the toolchain requirement.
 - A Cloudflare account. The free plan is enough.
 - A GitHub account, for the token.
 
