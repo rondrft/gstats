@@ -19,6 +19,26 @@ import { THEME_NAMES, THEMES } from './render/themes'
 
 const REPO_URL = 'https://github.com/rondrft/phosphor-stats'
 
+/**
+ * One title and one description, used by the `<title>`, the meta description
+ * and both sets of sharing tags. They were going to drift the first time one of
+ * them was reworded.
+ */
+const PAGE_TITLE = 'phosphor-stats — GitHub stats cards for your README'
+const PAGE_DESCRIPTION =
+  'Generate an SVG GitHub stats card for any username. Contributions, streaks and languages, rendered on the edge.'
+
+/**
+ * The sharing image, served by GitHub rather than by this Worker.
+ *
+ * It is 69 KB of already-compressed PNG — over half the entire bundle — to be
+ * fetched a handful of times ever, by scrapers rather than by readers. Bundling
+ * it to save a cross-origin hop would be the wrong way round. The same file is
+ * what gets uploaded by hand as the repository's social preview, so there is
+ * one image and one copy of it.
+ */
+const SOCIAL_PREVIEW_URL = `${REPO_URL.replace('github.com', 'raw.githubusercontent.com')}/main/assets/brand/social-preview.png`
+
 /** Profile used for the hero card and the theme gallery. */
 const DEMO_USER = 'rondrft'
 
@@ -44,8 +64,29 @@ export function landingPage(origin: string): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>phosphor-stats — GitHub stats cards for your README</title>
-<meta name="description" content="Generate an SVG GitHub stats card for any username. Contributions, streaks and languages, rendered on the edge.">
+<title>${PAGE_TITLE}</title>
+<meta name="description" content="${PAGE_DESCRIPTION}">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="alternate icon" href="/favicon-32.png" sizes="32x32">
+<link rel="apple-touch-icon" href="/favicon-180.png">
+<!-- Without these a shared link is a blank rectangle, which reads as a dead
+     link rather than as a page nobody wrote tags for. The image is absolute
+     because every scraper requires it to be, and og:url is built from the
+     origin the request arrived on so that a self-hosted instance advertises
+     itself rather than this one. -->
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="phosphor-stats">
+<meta property="og:title" content="${PAGE_TITLE}">
+<meta property="og:description" content="${PAGE_DESCRIPTION}">
+<meta property="og:url" content="${origin}/">
+<meta property="og:image" content="${SOCIAL_PREVIEW_URL}">
+<meta property="og:image:width" content="1280">
+<meta property="og:image:height" content="640">
+<meta property="og:image:alt" content="phosphor-stats — GitHub stats cards rendered as SVG">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="${PAGE_TITLE}">
+<meta name="twitter:description" content="${PAGE_DESCRIPTION}">
+<meta name="twitter:image" content="${SOCIAL_PREVIEW_URL}">
 <style>
   :root {
     --bg: #080D08;
@@ -104,6 +145,10 @@ export function landingPage(origin: string): string {
 
   .hero { display: grid; gap: var(--gap); }
   .hero-head { display: flex; align-items: center; gap: var(--gap); flex-wrap: wrap; }
+  /* Beside the title rather than above it, and small enough to read as a mark
+     rather than as an illustration. The file is already rounded, so it needs no
+     radius here; it must not shrink when the badges wrap. */
+  .hero-head .mark { width: 32px; height: 32px; display: block; flex: 0 0 auto; }
   .hero-card { display: flex; justify-content: center; }
   .hero-card img { max-width: 100%; height: auto; }
   .badges { display: flex; gap: .4rem; flex-wrap: wrap; }
@@ -207,6 +252,9 @@ export function landingPage(origin: string): string {
 <main>
   <div class="hero">
     <div class="hero-head">
+      <!-- Served by the Worker rather than inlined: the file carries gradient
+           ids, and inlining would put them in the same document as the page. -->
+      <img class="mark" src="/logo.svg" width="32" height="32" alt="" aria-hidden="true">
       <h1>phosphor-stats</h1>
       <div class="badges">
         <a href="${REPO_URL}"><img src="https://img.shields.io/github/stars/rondrft/phosphor-stats?style=flat-square&labelColor=080D08&color=EF9F27" alt="GitHub stars"></a>

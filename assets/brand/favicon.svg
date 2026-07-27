@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 220 220" role="img" aria-label="phosphor-stats">
+<defs>
+<linearGradient id="f" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7FE6BE"/><stop offset="1" stop-color="#12775A"/></linearGradient>
+</defs>
+<rect width="220" height="220" rx="52" fill="#E4F6EE"/>
+<path d="M110 36C126 68 144 78 154 100C162 118 166 130 166 144C166 172 142 188 110 188C78 188 54 172 54 144C54 128 62 108 74 92C81 103 89 105 93 97C97 76 102 58 110 36Z" fill="url(#f)"/>
+<ellipse cx="93" cy="142" rx="10" ry="15" fill="#0C3A2C"/>
+<ellipse cx="129" cy="142" rx="10" ry="15" fill="#0C3A2C"/>
+</svg>

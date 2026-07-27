@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/brand/logo.svg" width="96" height="96" alt="phosphor-stats">
+</p>
+
 # phosphor-stats
 
 GitHub stats cards for your README. Contributions, streaks and languages, rendered as SVG on the edge.

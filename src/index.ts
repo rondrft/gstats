@@ -17,6 +17,7 @@
  * address-based limit would throttle for no benefit.
  */
 
+import { brandAsset } from './brand'
 import { DEFAULT_DAILY_WRITE_BUDGET, readWriteBudget } from './budget'
 import { KvRateLimitStore, KvStatsCache } from './cache'
 import { GitHubClient, StaticTokenProvider } from './github/client'
@@ -137,8 +138,13 @@ export default {
         return handleCard(request, url, env)
       case '/health':
         return handleHealth(env)
-      default:
-        return new Response('not found', { status: 404 })
+      default: {
+        // Icons, which are constants rather than anything derived from a
+        // request. Checked before the 404 rather than listed as cases so that
+        // adding one to `src/brand.ts` does not also mean editing the router.
+        const brand = brandAsset(url.pathname)
+        return brand ?? new Response('not found', { status: 404 })
+      }
     }
   },
   /**

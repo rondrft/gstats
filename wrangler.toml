@@ -15,6 +15,24 @@ enabled = true
 [triggers]
 crons = ["*/15 * * * *"]
 
+# Brand files are imported by src/brand.ts and bundled as modules, which is why
+# there is no [assets] block and no build step. See docs/decisions.md for the
+# comparison against Workers static assets; the short version is that the three
+# icons served from here total about 8 KB against a 3 MB limit, and static
+# assets would have added a routing layer in front of a Worker that generates
+# its own `/`.
+#
+# `Data` yields an ArrayBuffer and `Text` a string. Only what the landing page
+# references is imported — logo-512.png and social-preview.png live in the repo
+# for use outside the Worker and are deliberately not bundled.
+[[rules]]
+type = "Data"
+globs = ["**/*.png"]
+
+[[rules]]
+type = "Text"
+globs = ["**/*.svg"]
+
 # Per-address limiting on /api, enforced inside the Worker.
 #
 # This is deliberately not a WAF rate limiting rule. Those are configured per

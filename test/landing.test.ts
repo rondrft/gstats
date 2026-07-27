@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { BRAND_PATHS } from '../src/brand'
 import { landingPage } from '../src/landing'
 import { CARD_IDS } from '../src/render/cards/registry'
 import { THEME_NAMES } from '../src/render/themes'
@@ -17,6 +18,53 @@ describe('landing page', () => {
   it('embeds a script that parses', () => {
     expect(script.length).toBeGreaterThan(0)
     expect(() => new Function(script)).not.toThrow()
+  })
+
+  /**
+   * A shared link with no tags is a blank rectangle, which reads as a dead link
+   * rather than as a page nobody wrote tags for. Every scraper needs the image
+   * absolute, which is the part that silently degrades if somebody makes it
+   * relative later.
+   */
+  it('carries the sharing tags every network reads', () => {
+    const meta = (attribute: string, name: string) =>
+      new RegExp(`<meta ${attribute}="${name}" content="([^"]+)"`).exec(page)?.[1]
+
+    expect(meta('property', 'og:type')).toBe('website')
+    expect(meta('property', 'og:title')).toContain('phosphor-stats')
+    expect(meta('property', 'og:description')?.length ?? 0).toBeGreaterThan(30)
+    expect(meta('property', 'og:url')).toBe('https://stats.example.com/')
+    expect(meta('name', 'twitter:card')).toBe('summary_large_image')
+
+    for (const image of [meta('property', 'og:image'), meta('name', 'twitter:image')]) {
+      expect(image).toMatch(/^https:\/\//)
+      expect(image).toContain('social-preview.png')
+    }
+  })
+
+  /** The page advertises the instance it was served from, not this one. */
+  it('takes og:url from the origin the request arrived on', () => {
+    expect(landingPage('https://stats.example.org')).toContain(
+      '<meta property="og:url" content="https://stats.example.org/">',
+    )
+  })
+
+  /** Inlining it would put the file's gradient ids in the page's own document. */
+  it('wears the logo beside the title, from a route rather than inlined', () => {
+    expect(page).toContain('<img class="mark" src="/logo.svg"')
+    expect(BRAND_PATHS).toContain('/logo.svg')
+    expect(page).not.toContain('linearGradient')
+  })
+
+  it('points at icons the Worker actually serves', () => {
+    const hrefs = [...page.matchAll(/<link rel="[^"]*icon"[^>]*href="([^"]+)"/g)].map(
+      (match) => match[1],
+    )
+
+    expect(hrefs.length).toBeGreaterThan(0)
+    for (const href of hrefs) {
+      expect(BRAND_PATHS, `${href} is linked but not served`).toContain(href)
+    }
   })
 
   it('offers every published design and every theme', () => {

@@ -35,13 +35,14 @@ src/
   params.ts         query string parsing, validation, sanitisation
   ratelimit.ts      per-address limits on /api: requests, distinct logins
   budget.ts         how much of the day's KV write allowance has gone
+  brand.ts          icon routes, bundled from assets/brand/ as modules
   stats.ts          cache -> GitHub -> stale fallback
   purge.ts          POST /purge: auth, rate limit, targeted invalidation
   warm.ts           the cron trigger: scheduled refresh of WARM_USERS
   streak.ts         streak arithmetic, pure and I/O free
   cache.ts          KV wrapper and cache key derivation
   i18n.ts           card copy and locale-aware formatting
-  landing.ts        the self-contained landing page
+  landing.ts        the self-contained landing page, head tags included
   languages.ts      language ranking: cap, recency weight, exclusions
   github/
     client.ts       GraphQL transport, rate limit accounting, TokenProvider

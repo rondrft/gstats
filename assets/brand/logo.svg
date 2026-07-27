@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 220 220" role="img" aria-label="phosphor-stats">
+<defs>
+<linearGradient id="bg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F0FBF6"/><stop offset="1" stop-color="#C9E9DA"/></linearGradient>
+<linearGradient id="flame" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#B8F5DC"/><stop offset="0.45" stop-color="#4FCB9E"/><stop offset="1" stop-color="#12775A"/></linearGradient>
+<linearGradient id="gloss" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff" stop-opacity="0.75"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></linearGradient>
+</defs>
+<rect width="220" height="220" rx="52" fill="url(#bg)"/>
+<rect x="1" y="1" width="218" height="218" rx="51" fill="none" stroke="#ffffff" stroke-opacity="0.9" stroke-width="2"/>
+<ellipse cx="110" cy="178" rx="38" ry="9" fill="#7FB8A0" opacity="0.25"/>
+<path d="M110 42C124 70 140 80 150 100C158 116 162 128 162 142C162 168 138 182 110 182C82 182 58 168 58 142C58 127 65 110 76 96C82 105 89 107 93 100C97 81 102 62 110 42Z" fill="url(#flame)"/>
+<path d="M110 42C124 70 140 80 150 100C154 108 157 115 159 122C150 106 132 96 110 96C88 96 72 105 63 119C65 111 70 103 76 96C82 105 89 107 93 100C97 81 102 62 110 42Z" fill="url(#gloss)"/>
+<ellipse cx="95" cy="142" rx="8" ry="13" fill="#0C3A2C"/>
+<ellipse cx="127" cy="142" rx="8" ry="13" fill="#0C3A2C"/>
+</svg>
