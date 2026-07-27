@@ -1,0 +1,42 @@
+name: Bug report
+description: Something renders wrong, or does not render at all.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing: if the card in your README looks out of date but the
+        `/api` URL opened directly is correct, that is GitHub's image proxy
+        holding on to an older copy. It resolves itself, and it is documented
+        under *Known limitations* in the README.
+
+  - type: input
+    id: url
+    attributes:
+      label: The URL that reproduces it
+      description: The full `/api` link, so the exact parameters are visible.
+      placeholder: https://phosphor-stats.rondrft.workers.dev/api?username=octocat&theme=amber
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected, and what you got
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: Where you saw it
+      description: Browser and version, and whether it was in a README or the raw SVG.
+      placeholder: Firefox 141, inside a README
+
+  - type: checkboxes
+    id: instance
+    attributes:
+      label: Instance
+      options:
+        - label: I am using the public instance
+        - label: I am self-hosting

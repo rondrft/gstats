@@ -1,0 +1,33 @@
+name: Feature request
+description: Suggest a parameter, a theme, a locale or a module.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Themes and locales are cheap to add and welcome — see the relevant
+        sections of CONTRIBUTING.md if you would rather send the change than
+        describe it.
+
+        Two things the card deliberately does not do: render anything that needs
+        a private scope, and invent a denominator for a value that has no natural
+        maximum.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The situation, rather than the solution.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would it look like?
+      description: A parameter name and an example URL are ideal.
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Anything you have already tried
