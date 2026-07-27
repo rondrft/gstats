@@ -23,13 +23,16 @@ preview_id = "57d7366d6d83441abf4cadd1344d2e2c"
 # so that a deploy starts from an empty cache instead of reading entries written
 # by the previous release.
 #
-# This value is only the local-development fallback. Real deploys override it
-# with the commit they were built from:
+# This value is only a fallback for `wrangler dev` invoked directly. Both
+# `pnpm dev` and `pnpm deploy` override it with the commit they are running,
+# because a constant here means every local session shares one cache namespace
+# for ever — and an entry written before a change to how a field is computed
+# would be read back after it.
 #
-#   wrangler deploy --var SERVICE_VERSION:$(git rev-parse --short HEAD)
-#
-# which `pnpm deploy` and the deploy workflow both do.
-SERVICE_VERSION = "dev"
+# The durable protection is `SCHEMA_VERSION` in src/cache.ts, which is part of
+# the same key and does not depend on the environment. Bump that when the
+# meaning of a stored field changes.
+SERVICE_VERSION = "dev-local"
 
 # GITHUB_TOKEN is a secret and must never appear here. Set it with:
 #   wrangler secret put GITHUB_TOKEN

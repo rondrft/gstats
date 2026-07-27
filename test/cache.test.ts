@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cacheKey } from '../src/cache'
+import { cacheKey, hasCurrentShape } from '../src/cache'
 import { type CardParams, parseParams } from '../src/params'
 
 function params(query: string): CardParams {
@@ -82,6 +82,64 @@ describe('data parameters do participate in the key', () => {
   })
 })
 
+/**
+ * The bug this guards: an entry written before `languages` changed meaning was
+ * still being served, because the only thing distinguishing it was the build id
+ * — and under `wrangler dev` the build id is a constant read from
+ * `wrangler.toml`. The key is now also versioned by what an entry means, and
+ * anything that slips through both is rejected on read.
+ */
+describe('shape validation', () => {
+  const current = {
+    freshUntil: 1,
+    data: {
+      login: 'octocat',
+      name: null,
+      createdAt: '2019-01-01',
+      totalContributions: 10,
+      yearContributions: 5,
+      bestYearContributions: 8,
+      streaks: {
+        current: { length: 0, start: null, end: null },
+        longest: { length: 0, start: null, end: null },
+      },
+      calendar: { from: '2025-07-21', counts: [0, 1] },
+      languages: [],
+      fetchedAt: 0,
+    },
+  }
+
+  it('accepts an entry the current code can read', () => {
+    expect(hasCurrentShape(current)).toBe(true)
+  })
+
+  it('rejects an entry written before the calendar existed', () => {
+    const { calendar: _gone, ...withoutCalendar } = current.data
+
+    expect(hasCurrentShape({ ...current, data: withoutCalendar })).toBe(false)
+  })
+
+  it('rejects entries missing any field a renderer dereferences', () => {
+    for (const field of [
+      'login',
+      'totalContributions',
+      'yearContributions',
+      'bestYearContributions',
+      'languages',
+      'streaks',
+    ] as const) {
+      const { [field]: _dropped, ...rest } = current.data
+      expect(hasCurrentShape({ ...current, data: rest }), field).toBe(false)
+    }
+  })
+
+  it('rejects anything that is not an entry at all', () => {
+    for (const junk of [null, undefined, 'string', 42, [], {}, { data: null }]) {
+      expect(hasCurrentShape(junk)).toBe(false)
+    }
+  })
+})
+
 describe('build namespacing', () => {
   it('retires every entry when the build changes', () => {
     expect(keyFor('username=octocat', 'abc1234')).not.toBe(keyFor('username=octocat', 'def5678'))
@@ -91,7 +149,7 @@ describe('build namespacing', () => {
     expect(keyFor('username=octocat')).toBe(keyFor('username=octocat'))
   })
 
-  it('reads as v1:<build>:<login>:<hash>', () => {
-    expect(keyFor('username=OctoCat')).toMatch(/^v1:abc1234:octocat:[0-9a-f]{8}$/)
+  it('reads as <schema>:<build>:<login>:<hash>', () => {
+    expect(keyFor('username=OctoCat')).toMatch(/^v\d+:abc1234:octocat:[0-9a-f]{8}$/)
   })
 })

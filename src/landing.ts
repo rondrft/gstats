@@ -22,6 +22,22 @@ const REPO_URL = 'https://github.com/rondrft/phosphor-stats'
 /** Profile used for the hero card and the theme gallery. */
 const DEMO_USER = 'rondrft'
 
+/**
+ * The parameters worth knowing about without leaving the page, in the order
+ * somebody reaches for them. It fills the space beside the taller control
+ * column and saves a trip to the README for the common cases; the exhaustive
+ * table stays in the README, where it can afford the room.
+ */
+const REFERENCE: [string, string][] = [
+  ['hide', 'total, streak, best, langs'],
+  ['exclude_langs', 'drop languages, comma separated'],
+  ['include_langs', 'bring back HTML, CSS, Shell'],
+  ['lang_style', 'blocks or bars'],
+  ['text / muted / border', 'hex, or none for the border'],
+  ['radius', 'corner radius, 0 to 24'],
+  ['cache_seconds', '1800 to 86400'],
+]
+
 export function landingPage(origin: string): string {
   return `<!doctype html>
 <html lang="en">
@@ -39,6 +55,14 @@ export function landingPage(origin: string): string {
     --muted: #1D9E75;
     --accent: #EF9F27;
     --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+
+    /* Two spacing values and no others. One separates things that belong to the
+       same section, the other separates sections. Anything in between reads as
+       an accident and stops the eye from telling where one thing ends. */
+    --gap: 0.75rem;
+    --section: 3rem;
+
+    --radius: 6px;
   }
   * { box-sizing: border-box; }
   body {
@@ -48,38 +72,57 @@ export function landingPage(origin: string): string {
     color: var(--text);
     font-family: var(--mono);
     font-size: 14px;
-    line-height: 1.7;
+    line-height: 1.65;
     /* Same banding as the cards, so the page reads as part of the same object. */
     background-image: repeating-linear-gradient(
       to bottom, rgba(239, 159, 39, 0.04) 0 2px, transparent 2px 4px
     );
   }
   main { max-width: 900px; margin: 0 auto; }
-  h1 { font-size: 1.6rem; margin: 0 0 .25rem; letter-spacing: -.02em; }
-  h2 { font-size: 1rem; margin: 3rem 0 1rem; color: var(--accent); font-weight: 600; }
-  p { margin: 0 0 1rem; }
-  a { color: var(--accent); }
-  .tagline { color: var(--muted); margin-bottom: 2rem; }
-  .hero { margin: 0 0 1rem; }
-  .hero img { max-width: 100%; height: auto; }
-  .badges { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 2rem; }
-  .badges img { height: 20px; }
-
-  .generator { display: grid; grid-template-columns: 260px 1fr; gap: 1.5rem; align-items: start; }
-  @media (max-width: 720px) { .generator { grid-template-columns: 1fr; } }
-
-  .controls {
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    padding: 1rem;
-    background: var(--panel);
-    display: grid;
-    gap: .75rem;
+  h1 { font-size: 1.6rem; margin: 0; letter-spacing: -.02em; }
+  h2 {
+    font-size: 1rem; margin: var(--section) 0 var(--gap);
+    color: var(--accent); font-weight: 600;
   }
-  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: .2rem; }
+  p { margin: 0 0 var(--gap); }
+  p:last-child { margin-bottom: 0; }
+  a { color: var(--accent); }
+  code { color: var(--text); }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+
+  /* One panel, used everywhere something is a container: the hero card, the
+     control column, the preview, the snippet, the reference table and every
+     gallery cell. Before this the controls had a border and the preview did
+     not, which is most of why the top of the page felt unmoored. */
+  .panel {
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--panel);
+    padding: var(--gap);
+  }
+
+  .hero { display: grid; gap: var(--gap); }
+  .hero-head { display: flex; align-items: center; gap: var(--gap); flex-wrap: wrap; }
+  .hero-card { display: flex; justify-content: center; }
+  .hero-card img { max-width: 100%; height: auto; }
+  .badges { display: flex; gap: .4rem; flex-wrap: wrap; }
+  .badges img { height: 20px; display: block; }
+
+  .generator {
+    display: grid; grid-template-columns: 320px 1fr;
+    gap: var(--gap); align-items: start; margin-top: var(--gap);
+  }
+  @media (max-width: 760px) { .generator { grid-template-columns: 1fr; } }
+
+  /* The fields are narrow; one per row wasted the panel's width and made the
+     column twice as tall as the one beside it. */
+  .controls { display: grid; grid-template-columns: 1fr 1fr; gap: var(--gap); }
+  .controls .wide { grid-column: 1 / -1; }
+  label { display: block; font-size: 11px; color: var(--muted); margin-bottom: .2rem; }
   input[type=text], select {
     width: 100%;
-    padding: .4rem .5rem;
+    padding: .35rem .45rem;
     background: var(--bg);
     color: var(--text);
     border: 1px solid var(--border);
@@ -87,84 +130,100 @@ export function landingPage(origin: string): string {
     font-family: var(--mono);
     font-size: 13px;
   }
-  input[type=color] {
-    width: 100%; height: 30px; padding: 0; background: none;
-    border: 1px solid var(--border); border-radius: 3px; cursor: pointer;
-  }
-  .colors { display: grid; grid-template-columns: repeat(3, 1fr); gap: .5rem; }
-  .checks { display: grid; grid-template-columns: repeat(2, 1fr); gap: .25rem .5rem; }
-  .checks label { display: flex; align-items: center; gap: .4rem; color: var(--text); margin: 0; }
-  input[type=checkbox] { accent-color: var(--accent); }
 
-  /* A grid item defaults to min-width:auto, which lets a long line push the
-     column wider than its track instead of scrolling. Every ancestor of the
-     scroll container has to opt out before overflow-x can take effect. */
-  .preview { display: grid; gap: 1rem; min-width: 0; }
-  .preview img { max-width: 100%; height: auto; }
-  .snippet { position: relative; min-width: 0; }
-  pre {
-    margin: 0; padding: .85rem 3.5rem .85rem 1rem; overflow-x: auto; max-width: 100%;
-    background: var(--panel); border: 1px solid var(--border); border-radius: 6px;
-    font-size: 12px; line-height: 1.6;
+  .colors { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; }
+  .colors label { text-align: center; margin: .25rem 0 0; font-size: 10px; }
+  input[type=color] {
+    width: 100%; height: 26px; padding: 0; background: none;
+    border: 1px solid var(--border); border-radius: 3px; cursor: pointer; display: block;
   }
+  .colors-head { display: flex; align-items: baseline; justify-content: space-between; gap: .5rem; }
+
+  .checks { display: grid; grid-template-columns: 1fr 1fr; gap: .1rem .5rem; }
+  .checks label { display: flex; align-items: center; gap: .35rem; color: var(--text); margin: 0; font-size: 12px; }
+  input[type=checkbox] { accent-color: var(--accent); margin: 0; }
+
+  .preview { display: grid; gap: var(--gap); min-width: 0; }
+  .preview-card { display: flex; justify-content: center; }
+  .preview-card img { max-width: 100%; height: auto; }
+
+  .snippet { position: relative; min-width: 0; padding: 0; }
+  /* Two lines that wrap. The URL is long, and horizontal scrolling inside a box
+     you are meant to copy out of is the worst of both. */
+  textarea {
+    display: block; width: 100%; resize: vertical;
+    /* Clear of the copy button, which floats over the top right corner. */
+    padding: .7rem 4.5rem .7rem .8rem;
+    background: transparent; color: var(--text);
+    border: 0; border-radius: var(--radius);
+    font-family: var(--mono); font-size: 12px; line-height: 1.5;
+    white-space: pre-wrap; word-break: break-all;
+  }
+  textarea:focus { outline: 1px solid var(--accent); outline-offset: -1px; }
+
   button {
-    position: absolute; top: .5rem; right: .5rem;
     background: var(--bg); color: var(--accent);
     border: 1px solid var(--accent); border-radius: 3px;
     padding: .2rem .6rem; font-family: var(--mono); font-size: 11px; cursor: pointer;
   }
   button:hover { background: var(--accent); color: var(--bg); }
+  .snippet button { position: absolute; top: .5rem; right: .5rem; }
 
-  .designs { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1.25rem; }
-  .designs button {
-    position: static;
-    padding: .3rem .8rem;
-    color: var(--muted); border-color: var(--muted);
+  .reference { padding: 0; overflow: hidden; }
+  .reference table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
+  .reference caption {
+    text-align: left; color: var(--muted); font-size: 11px;
+    padding: .5rem .8rem; border-bottom: 1px solid var(--border);
   }
+  .reference th, .reference td { text-align: left; padding: .28rem .8rem; vertical-align: top; }
+  .reference th { color: var(--accent); font-weight: 400; white-space: nowrap; }
+  .reference td { color: var(--muted); }
+  .reference tr + tr th, .reference tr + tr td { border-top: 1px solid rgba(29, 158, 117, .18); }
+
+  .designs { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: var(--gap); }
+  .designs button { color: var(--muted); border-color: var(--muted); padding: .3rem .8rem; }
   .designs button.on { color: var(--bg); background: var(--accent); border-color: var(--accent); }
 
   /* Two columns of themes, so the six previews of one design read as a set
      rather than as a list. */
-  .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
-  @media (max-width: 720px) { .gallery { grid-template-columns: 1fr; } }
+  .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--gap); }
+  @media (max-width: 760px) { .gallery { grid-template-columns: 1fr; } }
   .gallery figure { margin: 0; min-width: 0; }
   .gallery figcaption {
     display: flex; align-items: center; justify-content: space-between; gap: .5rem;
-    color: var(--muted); font-size: 12px; margin-bottom: .35rem;
+    color: var(--muted); font-size: 12px; margin-bottom: .5rem;
   }
-  .gallery figcaption button { position: static; padding: .1rem .5rem; }
+  .gallery figcaption button { padding: .1rem .5rem; }
   /* The card's own width varies with the design and the modules shown, so let
      the intrinsic aspect ratio win rather than any width hint. */
-  .gallery img { max-width: 100%; height: auto; }
+  .gallery-card { display: flex; justify-content: center; }
+  .gallery img { max-width: 100%; height: auto; display: block; }
 
-  .notice {
-    border-left: 2px solid var(--accent);
-    padding: .25rem 0 .25rem 1rem;
-    color: var(--muted);
-  }
-  footer { margin-top: 4rem; color: var(--muted); font-size: 12px; }
+  .notice { border-left: 2px solid var(--accent); padding-left: 1rem; color: var(--muted); }
+  footer { margin-top: var(--section); color: var(--muted); font-size: 12px; }
 </style>
 </head>
 <body>
 <main>
-  <h1>phosphor-stats</h1>
-  <p class="tagline">GitHub stats cards for your README. Contributions, streaks and languages, rendered as SVG on the edge.</p>
-
   <div class="hero">
-    <img src="/api?username=${DEMO_USER}" alt="Example stats card">
+    <div class="hero-head">
+      <h1>phosphor-stats</h1>
+      <div class="badges">
+        <a href="${REPO_URL}"><img src="https://img.shields.io/github/stars/rondrft/phosphor-stats?style=flat-square&labelColor=080D08&color=EF9F27" alt="GitHub stars"></a>
+        <a href="${REPO_URL}/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-1D9E75?style=flat-square&labelColor=080D08" alt="MIT license"></a>
+      </div>
+    </div>
+    <p class="muted">GitHub stats cards for your README. Contributions, streaks and languages, rendered as SVG on the edge.</p>
+    <div class="panel hero-card">
+      <img src="/api?username=${DEMO_USER}" alt="Example stats card">
+    </div>
+    <p class="small muted">If it is useful to you, a star helps other people find it — <a href="${REPO_URL}">${REPO_URL.replace('https://', '')}</a>.</p>
   </div>
-
-  <div class="badges">
-    <a href="${REPO_URL}"><img src="https://img.shields.io/github/stars/rondrft/phosphor-stats?style=flat-square&labelColor=080D08&color=EF9F27" alt="GitHub stars"></a>
-    <a href="${REPO_URL}/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-1D9E75?style=flat-square&labelColor=080D08" alt="MIT license"></a>
-  </div>
-
-  <p>If it is useful to you, a star helps other people find it — <a href="${REPO_URL}">${REPO_URL.replace('https://', '')}</a>.</p>
 
   <h2>Build your card</h2>
   <div class="generator">
-    <form class="controls" id="controls" onsubmit="return false">
-      <div>
+    <form class="panel controls" id="controls" onsubmit="return false">
+      <div class="wide">
         <label for="username">username</label>
         <input type="text" id="username" value="${DEMO_USER}" autocomplete="off" spellcheck="false">
       </div>
@@ -172,13 +231,6 @@ export function landingPage(origin: string): string {
         <label for="card">design</label>
         <select id="card">
 ${CARD_IDS.map((id) => `          <option value="${id}">${id}</option>`).join('\n')}
-        </select>
-      </div>
-      <div>
-        <label for="lang_mode">language mode</label>
-        <select id="lang_mode">
-          <option value="bytes">bytes</option>
-          <option value="repos">repos</option>
         </select>
       </div>
       <div>
@@ -195,12 +247,15 @@ ${THEME_NAMES.map((name) => `          <option value="${name}">${name}</option>`
         </select>
       </div>
       <div>
-        <label>colour overrides</label>
-        <div class="colors">
-          <input type="color" id="ring" value="#5DCAA5" title="ring">
-          <input type="color" id="accent" value="#EF9F27" title="accent">
-          <input type="color" id="bg" value="#080D08" title="background">
-        </div>
+        <label for="lang_mode">language mode</label>
+        <select id="lang_mode">
+          <option value="bytes">bytes</option>
+          <option value="repos">repos</option>
+        </select>
+      </div>
+      <div>
+        <label for="langs_count">languages shown</label>
+        <input type="text" id="langs_count" value="4" inputmode="numeric">
       </div>
       <div>
         <label>modules</label>
@@ -211,7 +266,7 @@ ${THEME_NAMES.map((name) => `          <option value="${name}">${name}</option>`
           <label><input type="checkbox" data-module="langs" checked> langs</label>
         </div>
       </div>
-      <div>
+      <div class="wide">
         <label>options</label>
         <div class="checks">
           <label><input type="checkbox" id="scanlines" checked> scanlines</label>
@@ -220,17 +275,37 @@ ${THEME_NAMES.map((name) => `          <option value="${name}">${name}</option>`
           <label><input type="checkbox" id="bars"> bar style</label>
         </div>
       </div>
-      <div>
-        <label for="langs_count">languages shown</label>
-        <input type="text" id="langs_count" value="4" inputmode="numeric">
+      <div class="wide">
+        <div class="colors-head">
+          <label>colour overrides</label>
+          <button type="button" id="reset-colors">reset to theme</button>
+        </div>
+        <div class="colors">
+          <div><input type="color" id="ring" value="#5DCAA5"><label for="ring">ring</label></div>
+          <div><input type="color" id="accent" value="#EF9F27"><label for="accent">accent</label></div>
+          <div><input type="color" id="bg" value="#080D08"><label for="bg">background</label></div>
+        </div>
       </div>
     </form>
 
     <div class="preview">
-      <img id="preview" src="/api?username=${DEMO_USER}" alt="Live preview">
-      <div class="snippet">
+      <div class="panel preview-card">
+        <img id="preview" src="/api?username=${DEMO_USER}" alt="Live preview">
+      </div>
+      <div class="panel snippet">
         <button id="copy" type="button">copy</button>
-        <pre><code id="markdown"></code></pre>
+        <textarea id="markdown" rows="2" readonly spellcheck="false"></textarea>
+      </div>
+      <div class="panel reference">
+        <table>
+          <caption>Everything else is a query parameter. Full table in the README.</caption>
+          <tbody>
+${REFERENCE.map(
+  ([name, description]) =>
+    `            <tr><th><code>${name}</code></th><td>${description}</td></tr>`,
+).join('\n')}
+          </tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -250,7 +325,9 @@ ${CARD_IDS.map(
 ${THEME_NAMES.map(
   (name) => `    <figure>
       <figcaption><code>?theme=${name}</code><button type="button" data-theme="${name}">use</button></figcaption>
-      <img data-theme-preview="${name}" src="/api?username=${DEMO_USER}&amp;theme=${name}" alt="${name} theme" loading="lazy">
+      <div class="panel gallery-card">
+        <img data-theme-preview="${name}" src="/api?username=${DEMO_USER}&amp;theme=${name}" alt="${name} theme" loading="lazy">
+      </div>
     </figure>`,
 ).join('\n')}
   </div>
@@ -324,17 +401,27 @@ ${THEME_NAMES.map(
     preview.src = path;
     var absolute = origin + path;
     var username = value('username').trim() || '${DEMO_USER}';
-    markdown.textContent =
+    markdown.value =
       '[![' + username + "'s GitHub stats](" + absolute + ')](https://github.com/' + username + ')';
   }
 
-  // Repaint the colour pickers when the theme changes, so an override is always
-  // relative to what is actually on screen.
-  document.getElementById('theme').addEventListener('change', function () {
-    var defaults = THEME_COLORS[this.value];
+  // Repaint the colour pickers from the theme, so an override is always
+  // relative to what is actually on screen — and so "reset to theme" has
+  // something to reset to.
+  function adoptThemeColors() {
+    var defaults = THEME_COLORS[value('theme')];
     ['ring', 'accent', 'bg'].forEach(function (key) {
       document.getElementById(key).value = defaults[key];
     });
+  }
+
+  document.getElementById('theme').addEventListener('change', function () {
+    adoptThemeColors();
+    render();
+  });
+
+  document.getElementById('reset-colors').addEventListener('click', function () {
+    adoptThemeColors();
     render();
   });
 
@@ -382,7 +469,7 @@ ${THEME_NAMES.map(
   document.getElementById('username').addEventListener('change', repaintGallery);
 
   copy.addEventListener('click', function () {
-    navigator.clipboard.writeText(markdown.textContent).then(function () {
+    navigator.clipboard.writeText(markdown.value).then(function () {
       copy.textContent = 'copied';
       setTimeout(function () { copy.textContent = 'copy'; }, 1400);
     });

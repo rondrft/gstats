@@ -16,12 +16,28 @@ import type { RateLimitState, StatsData } from './github/types'
 import type { DataParams } from './params'
 
 /**
- * Namespace for everything this service writes, so a key can be recognised at a
- * glance in the KV browser. Entries are retired by the build component of the
- * key rather than by editing this, and it only needs to change if the key format
- * itself does.
+ * What an entry *means*. Bump this whenever `StatsData` gains, loses or
+ * redefines a field, or whenever a stored value is computed differently — a
+ * changed language ranking counts, even though the type is unchanged.
+ *
+ * This is not the same thing as the build id, and the difference is the whole
+ * reason it exists. The build id answers "is this the same deployment?"; this
+ * answers "does this entry still mean what the code expects?". They coincide on
+ * a production deploy and come apart everywhere else:
+ *
+ *   - `wrangler dev` reads its `SERVICE_VERSION` from `wrangler.toml`, so the
+ *     build component is a constant. Every local session shares one namespace
+ *     forever, and a change to how a field is computed is invisible to the key.
+ *   - Re-running a deploy for the same commit reuses that commit's namespace,
+ *     as does deploying, rolling back, and rolling forward again.
+ *
+ * Relying on the build id alone left both of those able to serve an entry
+ * written under a different meaning.
+ *
+ * v2: added `calendar`, `yearContributions` and `bestYearContributions`, and
+ *     changed how `languages` is ranked.
  */
-const SCHEMA_VERSION = 'v1'
+const SCHEMA_VERSION = 'v2'
 
 /**
  * How long an entry physically survives in KV beyond its logical freshness.
@@ -88,12 +104,48 @@ function fingerprint(value: string): string {
   return (hash >>> 0).toString(16).padStart(8, '0')
 }
 
+/**
+ * Whether an entry has the shape the current code reads.
+ *
+ * The key is a heuristic — it depends on somebody having bumped
+ * `SCHEMA_VERSION`, and on the build id actually differing. This is the
+ * guarantee. Anything that reaches a renderer has been checked to carry the
+ * fields the renderer will dereference, so a missed bump costs one extra
+ * upstream call rather than a card that throws on `data.calendar.counts`.
+ *
+ * Only fields whose absence would break a renderer are checked; this is a
+ * tripwire, not a validator.
+ */
+export function hasCurrentShape(entry: unknown): entry is CacheEntry {
+  if (typeof entry !== 'object' || entry === null) return false
+  const candidate = entry as Partial<CacheEntry>
+  const data = candidate.data
+  if (typeof candidate.freshUntil !== 'number' || typeof data !== 'object' || data === null) {
+    return false
+  }
+
+  return (
+    typeof data.login === 'string' &&
+    typeof data.totalContributions === 'number' &&
+    typeof data.yearContributions === 'number' &&
+    typeof data.bestYearContributions === 'number' &&
+    Array.isArray(data.languages) &&
+    typeof data.streaks === 'object' &&
+    data.streaks !== null &&
+    typeof data.calendar === 'object' &&
+    data.calendar !== null &&
+    Array.isArray(data.calendar.counts)
+  )
+}
+
 export class KvStatsCache implements StatsCache {
   constructor(private readonly namespace: KVNamespace) {}
 
   async read(key: string): Promise<CacheEntry | null> {
     try {
-      return await this.namespace.get<CacheEntry>(key, 'json')
+      const entry = await this.namespace.get(key, 'json')
+      // An entry from an older shape is treated as a miss rather than trusted.
+      return hasCurrentShape(entry) ? entry : null
     } catch {
       // A cache that is down is a slow service, not a broken one.
       return null

@@ -56,3 +56,79 @@ describe('landing page', () => {
     expect(page).not.toMatch(/<link[^>]+stylesheet/)
   })
 })
+
+/**
+ * The top of the page used to read as a pile of unrelated blocks while the
+ * bottom read as a structured set, and the difference was that the bottom put
+ * everything in a bordered container and the top did not. These pin the rules
+ * that closed the gap.
+ */
+describe('visual structure', () => {
+  it('defines the panel once and uses it for every container', () => {
+    expect(page).toMatch(/\.panel \{/)
+
+    // Hero card, controls, preview, snippet, reference, and one per theme cell.
+    const uses = page.match(/class="[^"]*\bpanel\b/g) ?? []
+    expect(uses.length).toBeGreaterThanOrEqual(5 + THEME_NAMES.length)
+
+    for (const container of [
+      'hero-card',
+      'controls',
+      'preview-card',
+      'snippet',
+      'reference',
+      'gallery-card',
+    ]) {
+      expect(page).toMatch(new RegExp(`class="panel ${container}"`))
+    }
+  })
+
+  it('spaces everything from two variables and nothing else', () => {
+    const stylesheet = /<style>([\s\S]*?)<\/style>/.exec(page)?.[1] ?? ''
+
+    expect(stylesheet).toContain('--gap:')
+    expect(stylesheet).toContain('--section:')
+
+    // Any rem-valued margin or gap that is not one of the two, or a fraction of
+    // a line, is the kind of one-off that made the rhythm unreadable.
+    // The two definitions themselves are not strays; anything else is.
+    const strays = [
+      ...stylesheet.matchAll(/(?<!-)\b(?:margin|gap|margin-top|margin-bottom):\s*([\d.]+)rem/g),
+    ]
+      .map((match) => Number(match[1]))
+      .filter((value) => value > 0.5)
+
+    expect(strays).toEqual([])
+  })
+
+  it('gives every colour picker a label and a way back to the theme', () => {
+    for (const id of ['ring', 'accent', 'bg']) {
+      expect(page).toMatch(new RegExp(`<label for="${id}">`))
+    }
+    expect(page).toContain('id="reset-colors"')
+    expect(script).toContain('adoptThemeColors')
+  })
+
+  /**
+   * The snippet was a single scrolling line with the copy button sitting on top
+   * of the text. A long URL is the normal case here, not the exception.
+   */
+  it('wraps the snippet instead of scrolling it, clear of the copy button', () => {
+    const stylesheet = /<style>([\s\S]*?)<\/style>/.exec(page)?.[1] ?? ''
+
+    expect(page).toMatch(/<textarea id="markdown"[^>]*rows="2"/)
+    expect(stylesheet).toContain('white-space: pre-wrap')
+
+    const padding = /padding:\s*[\d.]+rem\s+([\d.]+)rem/.exec(
+      /textarea \{([\s\S]*?)\}/.exec(stylesheet)?.[1] ?? '',
+    )
+    // Wider than the button, which is absolutely positioned over that corner.
+    expect(Number(padding?.[1] ?? 0)).toBeGreaterThan(3)
+  })
+
+  it('fills the column beside the controls with a reference table', () => {
+    expect(page).toContain('class="panel reference"')
+    expect(page).toContain('<code>hide</code>')
+    expect(page).toContain('<code>cache_seconds</code>')
+  })
+})

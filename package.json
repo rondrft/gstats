@@ -10,7 +10,7 @@
   },
   "packageManager": "pnpm@11.10.0",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --var SERVICE_VERSION:dev-$(git rev-parse --short HEAD)",
     "deploy": "wrangler deploy --var SERVICE_VERSION:$(git rev-parse --short HEAD)",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
