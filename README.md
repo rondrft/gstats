@@ -44,6 +44,83 @@ Set one with `&theme=`. Individual colours can be overridden on top of any theme
 <tr><td><img src="docs/assets/theme-light.svg" alt="light theme"></td></tr>
 </table>
 
+## Designs
+
+Pick one with `&card=`. Every design honours `theme`, `hide`, `locale` and
+`animate`, so the two axes are independent.
+
+| `?card=` | What it is |
+| --- | --- |
+| `terminal` *(default)* | Three rings and a language column. |
+| `heatmap` | The trailing year, day by day. The only design that shows something the others cannot. |
+| `pass` | A boarding pass, with the streak on a perforated stub. |
+| `press` | A newspaper front page, set in serif. |
+| `gauge` | An instrument panel. Needles, no numbers inside the dials. |
+| `vinyl` | A record and its tracklist. Turns, once every eight seconds. |
+
+A published design never changes and is never removed: the URL in your README is
+a promise, and a redesign would silently rewrite a page you are not watching. A
+new look ships under a new id.
+
+## How languages are counted
+
+Summing bytes across an account measures how much code exists, which is not what
+a reader thinks they are looking at. One generated stylesheet, one vendored
+dependency or one committed bundle outweighs a year of deliberate work. Three
+corrections are applied by default:
+
+- **No repository contributes more than 15%** of the ranking. A monorepo still
+  counts for more than a scratch project; it just cannot decide the card by
+  itself. The cap engages once an account has enough repositories for it to be
+  satisfiable — below seven it would only flatten everything to equal shares.
+- **Recent work counts for more.** A repository pushed to in the last six months
+  counts fully, one within a year counts half, anything older a quarter.
+- **By-product languages are excluded**: `HTML`, `CSS`, `SCSS`, `Dockerfile`,
+  `Makefile`, `Shell`, `Batchfile`, `Roff`, `TeX` and `Jupyter Notebook`. Bring
+  any of them back with `include_langs`, and remove more with `exclude_langs`.
+  Anything under 0.5% is dropped as noise.
+
+None of this measures skill or effort, and it could not. It is a heuristic tuned
+to be wrong less often than raw byte counts are.
+
+### `lang_mode`
+
+```markdown
+<!-- bytes (default): weighted, capped byte counts -->
+![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&lang_mode=bytes)
+
+<!-- repos: how many repositories each language leads -->
+![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&lang_mode=repos)
+```
+
+`repos` ignores size entirely and counts the repositories a language is the main
+one in. It is cruder, and for a lot of profiles it is closer to the truth — a
+portfolio of eight small Rust services and one enormous inherited Java monolith
+reads very differently under the two.
+
+```markdown
+<!-- put CSS back in, and drop Go -->
+![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&include_langs=CSS&exclude_langs=Go)
+```
+
+### Private repositories
+
+**This service cannot see them, and should not be able to.** A GitHub token
+reaches exactly what its owner reaches, so a third party's private repositories
+are unreachable, without exception. Giving the shared token private access would
+publish the language breakdown of the private code belonging to whoever
+configured it — that is a leak wearing a feature's clothes, and there is no
+version of it that is safe to offer publicly.
+
+What does work: [self-host](docs/self-hosting.md#private-repositories) with your
+own token and restrict the instance to your own username. Your private code
+stays yours and nothing is exposed.
+
+Separately, and worth knowing: turning on **Settings → Profile → Include private
+contributions on my profile** makes your contribution total count private work
+without revealing anything about it. It costs nothing and a lot of people do not
+know it exists.
+
 ## Variants
 
 `?lang_style=bars` swaps the block characters for rectangles tinted with each
@@ -60,7 +137,10 @@ language's own colour:
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
 | `username` | string | — | **Required.** A GitHub login. |
+| `card` | string | `terminal` | Design: `terminal`, `heatmap`, `pass`, `press`, `gauge`, `vinyl`. |
 | `theme` | string | `phosphor` | `phosphor`, `amber`, `ice`, `mono`, `light`. |
+| `lang_mode` | string | `bytes` | How languages are ranked. See below. |
+| `include_langs` | csv | — | Re-admit a language from the default exclusions. |
 | `ring` | hex | theme | Colour of the contribution and record rings. |
 | `accent` | hex | theme | Colour of the streak ring and its icon. |
 | `bg` | hex | theme | Card background. Accepts `transparent`. |

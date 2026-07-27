@@ -101,6 +101,33 @@ Then point your README at your own host:
 ![My GitHub stats](https://phosphor-stats.<your-subdomain>.workers.dev/api?username=YOUR_LOGIN)
 ```
 
+## Private repositories
+
+The public instance cannot reach anybody's private repositories, and giving it a
+token that could would publish the language breakdown of somebody's private code
+to everyone who loads a card. On your own instance the calculus is different:
+the token is yours, the private code is yours, and nothing leaves your Worker
+except a card you asked for.
+
+To do it:
+
+1. Create a **classic** token with the `repo` scope. Fine-grained tokens work
+   too — grant *Contents: read-only* on the repositories you want counted.
+2. Store it as `GITHUB_TOKEN` exactly as above.
+3. **Restrict the instance to your own account.** This step is not optional.
+
+> [!WARNING]
+> A token with `repo` scope turns the service into a lookup for *your* private
+> language composition. Without a restriction, anyone who finds your Worker URL
+> can request any username — and while GitHub will not return other people's
+> private data, requests for **your own** username will happily return yours to
+> whoever asked. Restrict it before you deploy, not after.
+>
+> The intended mechanism for this is the `WHITELIST` variable described in the
+> reliability work. **It is not implemented yet.** Until it is, do not deploy a
+> `repo`-scoped token on a publicly reachable Worker. Either wait, or put
+> Cloudflare Access in front of the Worker so only you can reach it.
+
 ## 7. Protect your quota
 
 A public URL that spends your GitHub budget is worth a rate limit. In the

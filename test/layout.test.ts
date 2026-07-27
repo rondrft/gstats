@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { renderCard } from '../src/render/card'
+import { renderCard } from '../src/render/cards'
 import {
   CARD_HEIGHT,
   type ColumnContent,

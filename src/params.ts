@@ -13,6 +13,8 @@
  */
 
 import { DEFAULT_LOCALE, LOCALE_NAMES } from './i18n'
+import type { LangMode } from './languages'
+import { CARD_IDS, DEFAULT_CARD } from './render/cards/registry'
 import { normalizeColor } from './render/color'
 import { DEFAULT_THEME, resolveTheme, THEME_NAMES, type Theme } from './render/themes'
 
@@ -37,6 +39,8 @@ export type ModuleName = (typeof MODULES)[number]
 export const LANG_STYLES = ['blocks', 'bars'] as const
 export type LangStyle = (typeof LANG_STYLES)[number]
 
+export const LANG_MODES = ['bytes', 'repos'] as const
+
 export const DEFAULTS = {
   radius: 6,
   langsCount: 4,
@@ -45,6 +49,8 @@ export const DEFAULTS = {
   animate: true,
   showCredit: false,
   langStyle: 'blocks' as LangStyle,
+  langMode: 'bytes' as LangMode,
+  card: DEFAULT_CARD,
 } as const
 
 export const LIMITS = {
@@ -57,16 +63,21 @@ export const LIMITS = {
   cacheSeconds: { min: 1800, max: 86400 },
 } as const
 
-/** Inputs that change which bytes we ask GitHub for. */
+/** Inputs that change which bytes we ask GitHub for, or how they are ranked. */
 export interface DataParams {
   username: string
   langsCount: number
   excludeLangs: string[]
+  /** Languages to re-admit from the default exclusion list. */
+  includeLangs: string[]
+  langMode: LangMode
   hide: Set<ModuleName>
 }
 
 /** Inputs that only change how the fetched data is painted. */
 export interface StyleParams {
+  /** Which design renders the card. Unknown values resolve to the default. */
+  card: string
   themeName: string
   bg: string
   border: string
@@ -128,6 +139,12 @@ function parseCsv(raw: string | null): string[] {
     .filter((entry) => entry.length > 0)
 }
 
+/** Case-insensitive membership test against a closed set, with a fallback. */
+function oneOf<T extends string>(raw: string | null, allowed: readonly T[], fallback: T): T {
+  const value = raw?.trim().toLowerCase()
+  return (allowed as readonly string[]).includes(value ?? '') ? (value as T) : fallback
+}
+
 function parseHidden(raw: string | null): Set<ModuleName> {
   const known = new Set<string>(MODULES)
   const hidden = parseCsv(raw)
@@ -145,6 +162,7 @@ function parseStyle(query: URLSearchParams): StyleParams {
   const langStyle = query.get('lang_style')?.toLowerCase()
 
   return {
+    card: oneOf(query.get('card'), CARD_IDS, DEFAULT_CARD),
     themeName: THEME_NAMES.includes(themeName) ? themeName : DEFAULT_THEME,
     bg: parseColor(query.get('bg'), theme.bg),
     border: parseColor(query.get('border'), theme.border),
@@ -184,6 +202,8 @@ export function parseParams(query: URLSearchParams): ParseResult {
         LIMITS.langsCount.max,
       ),
       excludeLangs: parseCsv(query.get('exclude_langs')).map((lang) => lang.toLowerCase()),
+      includeLangs: parseCsv(query.get('include_langs')).map((lang) => lang.toLowerCase()),
+      langMode: oneOf(query.get('lang_mode'), LANG_MODES, DEFAULTS.langMode),
       hide: parseHidden(query.get('hide')),
       style,
       cacheSeconds: clampInt(

@@ -62,7 +62,9 @@ export interface StatsCache {
 export function cacheKey(params: DataParams, build: string): string {
   const dataShape = [
     `l=${params.langsCount}`,
+    `m=${params.langMode}`,
     `x=${[...params.excludeLangs].sort().join('|')}`,
+    `i=${[...params.includeLangs].sort().join('|')}`,
     `h=${[...params.hide].sort().join('|')}`,
   ].join(';')
 

@@ -12,7 +12,7 @@ import { GitHubClient, StaticTokenProvider } from './github/client'
 import { StatsError } from './github/types'
 import { landingPage } from './landing'
 import { parseParams, type StyleParams } from './params'
-import { renderCard } from './render/card'
+import { renderCard } from './render/cards'
 import { ERROR_CACHE_SECONDS, type ErrorCardKind, renderErrorCard } from './render/error-card'
 import { getStats } from './stats'
 

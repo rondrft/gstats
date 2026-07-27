@@ -19,9 +19,34 @@
  * integer each.
  */
 
-import type { ContributionDay } from '../streak'
+import { addDays, type ContributionDay } from '../streak'
 import type { GitHubClient } from './client'
+import type { CompactCalendar } from './types'
 import { StatsError } from './types'
+
+/**
+ * Days of history the heatmap design draws: 53 columns of 7, which is what fits
+ * a card and what GitHub itself shows. The streak calculation needs far less,
+ * but the same array serves both.
+ */
+export const CALENDAR_SPAN = 53 * 7
+
+/**
+ * Reduces a dated calendar to a positional one ending on `today`.
+ *
+ * Days the API did not report become zeros rather than gaps, so the array is
+ * dense and the renderer can index it by offset without searching.
+ */
+export function compactCalendar(
+  days: readonly ContributionDay[],
+  today: string,
+  span = CALENDAR_SPAN,
+): CompactCalendar {
+  const byDate = new Map(days.map((day) => [day.date, day.count]))
+  const from = addDays(today, -(span - 1))
+  const counts = Array.from({ length: span }, (_, index) => byDate.get(addDays(from, index)) ?? 0)
+  return { from, counts }
+}
 
 const CALENDAR_FIELDS = `weeks { contributionDays { date contributionCount } }`
 
@@ -66,6 +91,10 @@ export interface ContributionsResult {
   createdAt: string
   /** Lifetime total, or the current year's total when `includeHistory` is false. */
   total: number
+  /** The current calendar year so far. */
+  year: number
+  /** The best calendar year on record, including the current one. */
+  bestYear: number
   /** Daily counts covering at least the last 366 days, ascending. */
   calendar: ContributionDay[]
 }
@@ -100,7 +129,9 @@ export async function fetchContributions(
   collectCalendar(user.contributionsCollection, calendar)
 
   const firstYear = Number(user.createdAt.slice(0, 4))
-  let total = user.contributionsCollection.contributionCalendar.totalContributions
+  const year = user.contributionsCollection.contributionCalendar.totalContributions
+  let total = year
+  let bestYear = year
 
   // The previous year is always fetched, even when the total is hidden: without
   // it the calendar would be one day long every 1 January.
@@ -112,10 +143,14 @@ export async function fetchContributions(
       ...historyVariables(years),
     })
 
-    for (const year of years) {
-      const window = history.user?.[aliasFor(year)]
+    for (const windowYear of years) {
+      const window = history.user?.[aliasFor(windowYear)]
       if (window === undefined) continue
-      if (includeHistory) total += window.contributionCalendar.totalContributions
+      const windowTotal = window.contributionCalendar.totalContributions
+      if (includeHistory) {
+        total += windowTotal
+        bestYear = Math.max(bestYear, windowTotal)
+      }
       collectCalendar(window, calendar)
     }
   }
@@ -125,6 +160,8 @@ export async function fetchContributions(
     name: user.name,
     createdAt: user.createdAt.slice(0, 10),
     total,
+    year,
+    bestYear,
     calendar: [...calendar.entries()]
       .map(([date, count]) => ({ date, count }))
       .sort((a, b) => a.date.localeCompare(b.date)),

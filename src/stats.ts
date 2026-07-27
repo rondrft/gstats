@@ -15,7 +15,7 @@
 import type { KvRateLimitStore } from './cache'
 import { type CacheEntry, cacheKey, isFresh, type StatsCache } from './cache'
 import type { GitHubClient } from './github/client'
-import { fetchContributions } from './github/contributions'
+import { compactCalendar, fetchContributions } from './github/contributions'
 import { fetchLanguages } from './github/languages'
 import type { LanguageStat, StatsData } from './github/types'
 import type { CardParams } from './params'
@@ -103,6 +103,9 @@ async function fetchStats(deps: StatsDeps, params: CardParams): Promise<StatsDat
       ? fetchLanguages(deps.client, params.username, {
           limit: params.langsCount,
           exclude: params.excludeLangs,
+          include: params.includeLangs,
+          mode: params.langMode,
+          now: deps.now,
         })
       : Promise.resolve<LanguageStat[]>([]),
   ])
@@ -114,7 +117,10 @@ async function fetchStats(deps: StatsDeps, params: CardParams): Promise<StatsDat
     name: contributions.value.name,
     createdAt: contributions.value.createdAt,
     totalContributions: contributions.value.total,
+    yearContributions: contributions.value.year,
+    bestYearContributions: contributions.value.bestYear,
     streaks: computeStreaks(contributions.value.calendar, today),
+    calendar: compactCalendar(contributions.value.calendar, today),
     // A language query that fails degrades to an empty block rather than taking
     // the whole card down: the contribution half is already correct and
     // complete, and a partial card is more useful than an error.

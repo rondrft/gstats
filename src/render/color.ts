@@ -69,6 +69,31 @@ export function trackColor(color: string, factor = 0.22): string {
   return toHex({ r: rgb.r * factor, g: rgb.g * factor, b: rgb.b * factor })
 }
 
+/**
+ * Blends `from` towards `to`, with `t` running 0 to 1.
+ *
+ * Designs use this to build ramps and raised panels out of the theme's own
+ * colours instead of hard-coding a palette. A design that names its own colours
+ * stops honouring `theme`, which the registry contract forbids; deriving them
+ * keeps every design correct in every theme, including ones added later.
+ *
+ * Non-hex inputs are returned unchanged — there is nothing to interpolate
+ * between `transparent` and a colour.
+ */
+export function mix(from: string, to: string, t: number): string {
+  if (KEYWORDS.has(from.toLowerCase()) || KEYWORDS.has(to.toLowerCase())) return from
+  const a = parseHex(from)
+  const b = parseHex(to)
+  if (a === null || b === null) return from
+
+  const amount = Math.max(0, Math.min(1, t))
+  return toHex({
+    r: a.r + (b.r - a.r) * amount,
+    g: a.g + (b.g - a.g) * amount,
+    b: a.b + (b.b - a.b) * amount,
+  })
+}
+
 /** Normalises a validated colour to a form SVG accepts (`abc` -> `#abc`). */
 export function normalizeColor(color: string): string {
   if (KEYWORDS.has(color.toLowerCase())) return color.toLowerCase()

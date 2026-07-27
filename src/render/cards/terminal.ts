@@ -1,7 +1,13 @@
 /**
- * Card composition.
+ * `terminal` — the original design, and the default.
  *
- * Everything here is constrained by where the card ends up. GitHub serves README
+ * Three rings and a language column, in the palette of a phosphor CRT.
+ *
+ * This design is frozen. It is what every URL written before `?card=` existed
+ * resolves to, so a change here rewrites cards in READMEs nobody is watching.
+ * A different look ships as `terminal-v2`; see the contract in `registry.ts`.
+ *
+ * Everything about it is constrained by where it ends up. GitHub serves README
  * images through Camo as `<img>`, which means no scripts, no external fonts, no
  * remote images and no CSS from outside the document. What does survive is
  * inline CSS animation, so that is the only dynamic element the card uses — and
@@ -13,30 +19,24 @@
  * instead of padding it with empty space.
  */
 
-import type { StatsData } from '../github/types'
-import { formatDayRange, formatNumber, interpolate, resolveLocale, type Strings } from '../i18n'
-import type { CardParams, ModuleName, StyleParams } from '../params'
-import { type IconName, icon } from './icons'
-import { langsBlock, measureLangs } from './langs'
+import type { StatsData } from '../../github/types'
+import { formatDayRange, formatNumber, interpolate, type Strings } from '../../i18n'
+import type { CardParams, ModuleName, StyleParams } from '../../params'
+import { credit, frame, plate, round, svgDocument } from '../chrome'
+import { type IconName, icon } from '../icons'
+import { langsBlock, measureLangs } from '../langs'
 import {
-  CARD_HEIGHT,
-  type CardLayout,
   type ColumnContent,
-  FRAME_INSET,
   LABEL_BASELINE,
   LABEL_FONT_SIZE,
   layoutCard,
   SUBTITLE_BASELINE,
   SUBTITLE_FONT_SIZE,
   VALUE_BASELINE,
-} from './layout'
-import { ring, valueFontSize } from './ring'
-import { escapeXml } from './xml'
-
-export { CARD_HEIGHT }
-
-const FONT_STACK =
-  "ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace"
+} from '../layout'
+import { ring, valueFontSize } from '../ring'
+import { escapeXml } from '../xml'
+import type { CardRenderer, RenderOptions } from './registry'
 
 /** Staggering the rings reads as one gesture rather than three simultaneous ones. */
 const ANIMATION_STAGGER_SECONDS = 0.12
@@ -63,9 +63,8 @@ interface RingSpec {
  * a locale or the set of visible modules moves the whole composition together
  * instead of leaving one piece behind at a hard-coded offset.
  */
-export function renderCard(data: StatsData, params: CardParams): string {
+export function renderTerminal(data: StatsData, { params, strings }: RenderOptions): string {
   const { style } = params
-  const strings = resolveLocale(style.locale)
   const specs = ringSpecs(data, params, strings)
   const showLangs = !params.hide.has('langs')
 
@@ -91,8 +90,8 @@ export function renderCard(data: StatsData, params: CardParams): string {
   })
 
   const body =
-    background(layout, style) +
-    frame(layout, style) +
+    plate(layout.width, layout.height, style) +
+    frame(layout.width, layout.height, style) +
     drawn.map(({ spec, cx, markup }) => markup + ringText(spec, cx, layout.cy, style)).join('') +
     (layout.langs === null
       ? ''
@@ -105,21 +104,20 @@ export function renderCard(data: StatsData, params: CardParams): string {
           style: style.langStyle,
           emptyLabel: strings.noLanguages,
         })) +
-    (style.showCredit ? credit(layout, style) : '')
+    credit(layout.width, layout.height, style)
 
-  const styleBlock = animationStyles(drawn.map(({ keyframes }) => keyframes))
-  const label = escapeXml(ariaLabel(data, specs, style.locale))
-
-  return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="${layout.width}" height="${layout.height}" ` +
-    `viewBox="0 0 ${layout.width} ${layout.height}" role="img" ` +
-    `aria-label="${label}" font-family="${FONT_STACK}">` +
-    `<title>${label}</title>` +
-    styleBlock +
-    body +
-    `</svg>`
+  return svgDocument(
+    {
+      width: layout.width,
+      height: layout.height,
+      label: ariaLabel(data, specs, style.locale),
+      css: animationStyles(drawn.map(({ keyframes }) => keyframes)),
+    },
+    body,
   )
 }
+
+export const terminal: CardRenderer = { id: 'terminal', render: renderTerminal }
 
 /** Reduces a ring to the strings the layout needs in order to measure it. */
 function columnContent(spec: RingSpec, locale: string): ColumnContent {
@@ -203,48 +201,6 @@ function ringText(spec: RingSpec, cx: number, cy: number, style: StyleParams): s
   )
 }
 
-/** Coordinates come out of the layout as reals; two decimals is plenty. */
-const round = (n: number) => Math.round(n * 100) / 100
-
-/**
- * Background plate plus the scanline texture.
- *
- * The pattern is a 4x4 tile carrying a 2px band, which at this scale reads as
- * the horizontal banding of a CRT without turning into moire when the browser
- * scales the card down. The id is document-local; each card is its own `<img>`
- * document, so two cards in one README cannot collide.
- */
-function background({ width, height }: CardLayout, style: StyleParams): string {
-  const plate = `<rect width="${width}" height="${height}" rx="${style.radius}" fill="${style.bg}"/>`
-  if (!style.scanlines) return plate
-
-  return (
-    `<defs><pattern id="scanlines" width="4" height="4" patternUnits="userSpaceOnUse">` +
-    `<rect width="4" height="2" fill="${style.accent}" opacity="0.05"/></pattern></defs>` +
-    plate +
-    `<rect width="${width}" height="${height}" rx="${style.radius}" fill="url(#scanlines)"/>`
-  )
-}
-
-function frame({ width, height }: CardLayout, style: StyleParams): string {
-  if (style.border === 'none' || style.border === 'transparent') return ''
-  // Concentric with the outer corner: the inset shrinks the radius by the same
-  // amount, so the two curves stay parallel instead of drifting apart.
-  const radius = Math.max(0, style.radius - 4)
-  return (
-    `<rect x="${FRAME_INSET}" y="${FRAME_INSET}" width="${width - FRAME_INSET * 2}" ` +
-    `height="${height - FRAME_INSET * 2}" rx="${radius}" fill="none" ` +
-    `stroke="${style.border}" stroke-width="0.5"/>`
-  )
-}
-
-function credit({ width, height }: CardLayout, style: StyleParams): string {
-  return (
-    `<text x="${width - FRAME_INSET / 2}" y="${height - 3}" text-anchor="end" ` +
-    `font-size="7" fill="${style.muted}" opacity="0.55">phosphor-stats</text>`
-  )
-}
-
 /**
  * Inline stylesheet driving the draw-on animation.
  *
@@ -254,7 +210,7 @@ function credit({ width, height }: CardLayout, style: StyleParams): string {
  * frame for the length of the delay instead.
  */
 function animationStyles(keyframes: readonly string[]): string {
-  const active = keyframes.filter((frame) => frame.length > 0)
+  const active = keyframes.filter((rule) => rule.length > 0)
   if (active.length === 0) return ''
 
   const rules = active
@@ -268,10 +224,7 @@ function animationStyles(keyframes: readonly string[]): string {
     })
     .join('')
 
-  return (
-    `<style>${rules}` +
-    `@media (prefers-reduced-motion:reduce){.ring-progress{animation:none}}</style>`
-  )
+  return `${rules}@media (prefers-reduced-motion:reduce){.ring-progress{animation:none}}`
 }
 
 /**

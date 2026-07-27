@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { renderCard } from '../src/render/card'
+import { renderCard } from '../src/render/cards'
 import { renderErrorCard } from '../src/render/error-card'
 import { CARD_HEIGHT } from '../src/render/layout'
 import { ARC, CIRCUMFERENCE } from '../src/render/ring'

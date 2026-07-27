@@ -18,6 +18,19 @@ export interface LanguageStat {
   pct: number
 }
 
+/**
+ * The trailing year of daily counts, stored positionally rather than as dated
+ * records. A year of `{date, count}` objects is roughly fifteen times the JSON,
+ * and every byte of it sits in the cache entry of every profile whether or not
+ * the reader asked for a design that draws it.
+ */
+export interface CompactCalendar {
+  /** Day of `counts[0]`, `YYYY-MM-DD` UTC. */
+  from: string
+  /** One entry per consecutive day starting at `from`. */
+  counts: number[]
+}
+
 export interface StatsData {
   login: string
   /** Display name, absent on accounts that never set one. */
@@ -25,7 +38,15 @@ export interface StatsData {
   /** Account creation date, `YYYY-MM-DD` UTC. */
   createdAt: string
   totalContributions: number
+  /** Contributions in the current calendar year so far. */
+  yearContributions: number
+  /**
+   * The account's best calendar year. Gives the current year a denominator that
+   * belongs to this reader rather than to an invented scale.
+   */
+  bestYearContributions: number
   streaks: Streaks
+  calendar: CompactCalendar
   languages: LanguageStat[]
   /** Epoch milliseconds, so a cached entry can report its own age. */
   fetchedAt: number

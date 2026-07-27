@@ -228,3 +228,76 @@ function verticalExtent(
 export function langsTextWidth(text: string): number {
   return textWidth(text, LANGS_FONT_SIZE)
 }
+
+/** A rectangle of content a design wants placed. */
+export interface Block {
+  width: number
+  height: number
+}
+
+export interface RowLayout {
+  width: number
+  height: number
+  /** Left edge of each block, in order. */
+  x: number[]
+  /** Top edge of each block, in order. Each is centred on the row's axis. */
+  y: number[]
+  /** Vertical centre shared by every block. */
+  middle: number
+  content: BoundingBox
+}
+
+export interface RowOptions {
+  /** Space between adjacent blocks. */
+  gap?: number
+  /** Margin on all four sides. The card grows to accommodate it. */
+  margin?: number
+  /** Preferred height. Grows if a block does not fit inside the margins. */
+  height?: number
+}
+
+/**
+ * Lays a row of blocks out, centred, with equal margins on all four sides.
+ *
+ * This is the primitive every design is built on, `layoutCard` included in
+ * spirit. A design describes what it needs as boxes and is told where to draw
+ * them; it never picks a coordinate. That is what keeps a card centred when a
+ * module is hidden, a translation is longer, or a number gains a digit — and
+ * what makes the margin-symmetry test meaningful rather than a tautology about
+ * constants somebody typed in.
+ */
+export function layoutRow(blocks: readonly Block[], options: RowOptions = {}): RowLayout {
+  const gap = options.gap ?? LANGS_GAP
+  const margin = options.margin ?? MARGIN
+
+  const contentWidth =
+    blocks.reduce((sum, block) => sum + block.width, 0) + Math.max(0, blocks.length - 1) * gap
+  const contentHeight = blocks.reduce((tallest, block) => Math.max(tallest, block.height), 0)
+
+  const width = Math.max(FRAME_INSET * 2, Math.round(contentWidth + margin * 2))
+  const height = Math.max(options.height ?? CARD_HEIGHT, Math.ceil(contentHeight + margin * 2))
+
+  const left = (width - contentWidth) / 2
+  const middle = height / 2
+
+  const x: number[] = []
+  let cursor = left
+  for (const block of blocks) {
+    x.push(cursor)
+    cursor += block.width + gap
+  }
+
+  return {
+    width,
+    height,
+    x,
+    y: blocks.map((block) => middle - block.height / 2),
+    middle,
+    content: {
+      left,
+      right: left + contentWidth,
+      top: middle - contentHeight / 2,
+      bottom: middle + contentHeight / 2,
+    },
+  }
+}

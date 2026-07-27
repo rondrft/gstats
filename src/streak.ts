@@ -137,3 +137,13 @@ function longestStreak(counts: Map<string, number>): StreakRange {
 export function utcToday(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10)
 }
+
+/** Calendar day `delta` days from `date`, in UTC. */
+export function addDays(date: string, delta: number): string {
+  return shiftDays(date, delta)
+}
+
+/** Day of the week for a UTC date, 0 = Sunday. */
+export function weekdayOf(date: string): number {
+  return new Date(toTimestamp(date)).getUTCDay()
+}

@@ -14,6 +14,7 @@
  * layers from interfering.
  */
 
+import { CARD_IDS, DEFAULT_CARD } from './render/cards/registry'
 import { THEME_NAMES, THEMES } from './render/themes'
 
 const REPO_URL = 'https://github.com/rondrft/phosphor-stats'
@@ -114,11 +115,26 @@ export function landingPage(origin: string): string {
   }
   button:hover { background: var(--accent); color: var(--bg); }
 
-  .gallery { display: grid; gap: 1.25rem; }
-  .gallery figure { margin: 0; }
-  .gallery figcaption { color: var(--muted); font-size: 12px; margin-bottom: .35rem; }
-  /* The card's own width varies with the modules shown, so let the intrinsic
-     aspect ratio win rather than the width/height hints. */
+  .designs { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: 1.25rem; }
+  .designs button {
+    position: static;
+    padding: .3rem .8rem;
+    color: var(--muted); border-color: var(--muted);
+  }
+  .designs button.on { color: var(--bg); background: var(--accent); border-color: var(--accent); }
+
+  /* Two columns of themes, so the six previews of one design read as a set
+     rather than as a list. */
+  .gallery { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.25rem; }
+  @media (max-width: 720px) { .gallery { grid-template-columns: 1fr; } }
+  .gallery figure { margin: 0; min-width: 0; }
+  .gallery figcaption {
+    display: flex; align-items: center; justify-content: space-between; gap: .5rem;
+    color: var(--muted); font-size: 12px; margin-bottom: .35rem;
+  }
+  .gallery figcaption button { position: static; padding: .1rem .5rem; }
+  /* The card's own width varies with the design and the modules shown, so let
+     the intrinsic aspect ratio win rather than any width hint. */
   .gallery img { max-width: 100%; height: auto; }
 
   .notice {
@@ -151,6 +167,19 @@ export function landingPage(origin: string): string {
       <div>
         <label for="username">username</label>
         <input type="text" id="username" value="${DEMO_USER}" autocomplete="off" spellcheck="false">
+      </div>
+      <div>
+        <label for="card">design</label>
+        <select id="card">
+${CARD_IDS.map((id) => `          <option value="${id}">${id}</option>`).join('\n')}
+        </select>
+      </div>
+      <div>
+        <label for="lang_mode">language mode</label>
+        <select id="lang_mode">
+          <option value="bytes">bytes</option>
+          <option value="repos">repos</option>
+        </select>
       </div>
       <div>
         <label for="theme">theme</label>
@@ -206,12 +235,22 @@ ${THEME_NAMES.map((name) => `          <option value="${name}">${name}</option>`
     </div>
   </div>
 
-  <h2>Themes</h2>
-  <div class="gallery">
+  <h2>Designs and themes</h2>
+  <p class="tagline">
+    Two independent axes. Pick a design and every theme below redraws in it; each
+    cell loads the pairing into the generator above.
+  </p>
+  <div class="designs" id="designs">
+${CARD_IDS.map(
+  (id, index) =>
+    `    <button type="button" data-card="${id}"${index === 0 ? ' class="on"' : ''}>${id}</button>`,
+).join('\n')}
+  </div>
+  <div class="gallery" id="gallery">
 ${THEME_NAMES.map(
   (name) => `    <figure>
-      <figcaption>?theme=${name}</figcaption>
-      <img src="/api?username=${DEMO_USER}&amp;theme=${name}" alt="${name} theme" loading="lazy">
+      <figcaption><code>?theme=${name}</code><button type="button" data-theme="${name}">use</button></figcaption>
+      <img data-theme-preview="${name}" src="/api?username=${DEMO_USER}&amp;theme=${name}" alt="${name} theme" loading="lazy">
     </figure>`,
 ).join('\n')}
   </div>
@@ -250,8 +289,10 @@ ${THEME_NAMES.map(
     var theme = value('theme');
     var params = ['username=' + encodeURIComponent(username)];
 
+    if (value('card') !== 'terminal') params.push('card=' + value('card'));
     if (theme !== 'phosphor') params.push('theme=' + theme);
     if (value('locale') !== 'en') params.push('locale=' + value('locale'));
+    if (value('lang_mode') !== 'bytes') params.push('lang_mode=' + value('lang_mode'));
 
     var defaults = THEME_COLORS[theme];
     ['ring', 'accent', 'bg'].forEach(function (key) {
@@ -299,6 +340,46 @@ ${THEME_NAMES.map(
 
   form.addEventListener('input', render);
   form.addEventListener('change', render);
+
+  // The gallery has two axes and cannot be a flat grid of every pairing: six
+  // themes times six designs is thirty-six cards nobody scrolls through. One
+  // design is selected at a time and the six themes redraw underneath it.
+  var gallery = document.getElementById('gallery');
+  var designs = document.getElementById('designs');
+  var galleryCard = '${DEFAULT_CARD}';
+
+  function repaintGallery() {
+    gallery.querySelectorAll('[data-theme-preview]').forEach(function (img) {
+      var theme = img.getAttribute('data-theme-preview');
+      var query = 'username=' + encodeURIComponent(value('username').trim() || '${DEMO_USER}');
+      if (galleryCard !== 'terminal') query += '&card=' + galleryCard;
+      if (theme !== 'phosphor') query += '&theme=' + theme;
+      img.src = '/api?' + query;
+    });
+  }
+
+  designs.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-card]');
+    if (!button) return;
+    galleryCard = button.getAttribute('data-card');
+    designs.querySelectorAll('button').forEach(function (other) {
+      other.classList.toggle('on', other === button);
+    });
+    repaintGallery();
+  });
+
+  // Each cell loads its own pairing into the generator, which is the point of
+  // showing it: the gallery is a picker, not a poster.
+  gallery.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-theme]');
+    if (!button) return;
+    document.getElementById('card').value = galleryCard;
+    document.getElementById('theme').value = button.getAttribute('data-theme');
+    document.getElementById('theme').dispatchEvent(new Event('change'));
+    document.getElementById('controls').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  });
+
+  document.getElementById('username').addEventListener('change', repaintGallery);
 
   copy.addEventListener('click', function () {
     navigator.clipboard.writeText(markdown.textContent).then(function () {

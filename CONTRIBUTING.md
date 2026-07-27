@@ -38,13 +38,15 @@ src/
   cache.ts          KV wrapper and cache key derivation
   i18n.ts           card copy and locale-aware formatting
   landing.ts        the self-contained landing page
+  languages.ts      language ranking: cap, recency weight, exclusions
   github/
     client.ts       GraphQL transport, rate limit accounting, TokenProvider
     contributions.ts
     languages.ts
     types.ts        shapes shared across layers
   render/
-    card.ts         composition
+    cards/          the design registry and its implementations
+    chrome.ts       plate, frame and fonts shared by every design
     layout.ts       measures the content and centres it
     metrics.ts      monospace text measurement
     ring.ts         ring geometry
@@ -77,8 +79,8 @@ depends on another literal, derive it instead.
 
 **Nothing outside `layout.ts` decides where anything goes.** The card is
 measured first and drawn second: `layoutCard` returns the width, the ring
-centres, the shared axis and the language block's placement, and `card.ts`
-consumes them. That is what keeps the composition centred when a label changes,
+centres, the shared axis and the language block's placement, and the
+designs consume them. That is what keeps the composition centred when a label changes,
 a locale changes or a module is hidden — a coordinate written anywhere else is a
 piece that will not move with the rest. If you add something to the card, teach
 the layout to measure it. `test/layout.test.ts` asserts that the four margins
@@ -106,6 +108,20 @@ deploy starts from an empty cache and cannot read entries written against an
 older shape of `StatsData`. Deploys pass the commit they were built from. The
 cost is a burst of upstream traffic after each release, proportional to how many
 distinct profiles are active, which is worth remembering on a busy instance.
+
+## Adding a design
+
+Designs live in `src/render/cards/`. Read the contract at the top of
+`registry.ts` first — it is short, and it is the part that cannot be undone once
+somebody has pasted a URL into a README.
+
+A design gets its coordinates from `layoutRow` and decides none of its own, uses
+`chrome.ts` for the plate and frame so it honours `theme` for free, and takes its
+numbers from `visibleStats` in `modules.ts` so it honours `hide` and `locale` for
+free too. `test/cards.test.ts` runs the same battery over every registered id —
+theme, locale, hide, `animate=false`, escaping, empty accounts, six-digit
+numbers, size budget — so a new entry in the registry is a new set of tests
+without writing any.
 
 ## Adding a theme
 
