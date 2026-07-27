@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { cacheKey, hasCurrentShape } from '../src/cache'
+import { cacheKey, hasCurrentShape, shouldSample } from '../src/cache'
 import { type CardParams, parseParams } from '../src/params'
 
 function params(query: string): CardParams {
@@ -151,5 +151,53 @@ describe('build namespacing', () => {
 
   it('reads as <schema>:<build>:<login>:<hash>', () => {
     expect(keyFor('username=OctoCat')).toMatch(/^v\d+:abc1234:octocat:[0-9a-f]{8}$/)
+  })
+})
+
+/**
+ * This reading used to be written on every cache miss, which made it half of
+ * all the KV writes the service performs — and KV writes, not the GitHub quota,
+ * are what the free plan runs out of first. It feeds `/health` and the low-quota
+ * fallback, and neither needs a value accurate to the request.
+ */
+describe('rate limit sampling', () => {
+  const at = (minutes: number) => Date.parse('2026-07-27T12:00:00Z') + minutes * 60_000
+  const reading = (remaining: number, minutes: number) => ({
+    remaining,
+    limit: 5000,
+    reset: null,
+    observedAt: at(minutes),
+  })
+
+  it('always writes the first reading', () => {
+    expect(shouldSample(null, 4000, at(0))).toBe(true)
+  })
+
+  it('skips a reading taken moments after the last one', () => {
+    expect(shouldSample(reading(4000, 0), 3990, at(1))).toBe(false)
+    expect(shouldSample(reading(4000, 0), 3990, at(4))).toBe(false)
+  })
+
+  it('writes once the sampling interval has passed', () => {
+    expect(shouldSample(reading(4000, 0), 3900, at(5))).toBe(true)
+    expect(shouldSample(reading(4000, 0), 3900, at(30))).toBe(true)
+  })
+
+  /** An instance running out of quota should be visible at once, not in five minutes. */
+  it('writes immediately when the budget crosses below the threshold', () => {
+    expect(shouldSample(reading(1200, 0), 900, at(1))).toBe(true)
+  })
+
+  /**
+   * Once it is already low the interval takes over again. That is exactly when
+   * the instance is busiest and least able to afford a write per request.
+   */
+  it('does not then write on every request while it stays low', () => {
+    expect(shouldSample(reading(900, 0), 800, at(1))).toBe(false)
+    expect(shouldSample(reading(900, 0), 800, at(5))).toBe(true)
+  })
+
+  it('writes when the budget recovers past the threshold and time has passed', () => {
+    expect(shouldSample(reading(500, 0), 4900, at(6))).toBe(true)
   })
 })

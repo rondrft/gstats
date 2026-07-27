@@ -81,6 +81,7 @@ function renderTerminal(data: StatsData, { params, strings }: RenderOptions): st
         cy: layout.cy,
         pct: spec.pct,
         color: spec.color,
+        background: style.bg,
         index,
         animate: style.animate,
       }),

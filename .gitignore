@@ -6,3 +6,24 @@ dist/
 !.dev.vars.example
 *.log
 .DS_Store
+
+# AI assistant instructions and configuration. Nothing from a coding assistant
+# belongs in this repository — not its briefings, not its rules files, not its
+# local state. Ignored here rather than only in a global config so the rule
+# travels with the repo and holds for every clone and every contributor.
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+GEMINI.md
+.claude/
+.cursor/
+.cursorrules
+.cursorignore
+.windsurfrules
+.aider*
+.continue/
+.codeium/
+.github/copilot-instructions.md
+.github/instructions/
+.github/prompts/
+

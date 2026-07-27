@@ -71,7 +71,15 @@ export function renderErrorCard({ kind, style, retryAfterMinutes }: ErrorCardOpt
   const cx = 60
   // An empty ring: the shape is recognisable as this service's card, and a
   // hollow one reads as "nothing to show" without needing a separate icon set.
-  const { markup } = ring({ cx, cy, pct: 0, color: style.accent, index: 0, animate: false })
+  const { markup } = ring({
+    cx,
+    cy,
+    pct: 0,
+    color: style.accent,
+    background: style.bg,
+    index: 0,
+    animate: false,
+  })
 
   const frame =
     style.border === 'none' || style.border === 'transparent'

@@ -15,7 +15,7 @@ import { LIMITS, parseParams, type StyleParams } from './params'
 import { handlePurge, KvPurgeLimiter } from './purge'
 import { renderCard } from './render/cards'
 import { ERROR_CACHE_SECONDS, type ErrorCardKind, renderErrorCard } from './render/error-card'
-import { getStats } from './stats'
+import { type CacheStatus, getStats } from './stats'
 import { KvWarmStore, parseWarmUsers, warmUsers } from './warm'
 
 export interface Env {
@@ -153,17 +153,38 @@ async function handleCard(url: URL, env: Env): Promise<Response> {
       parsed.params,
     )
 
-    const maxAge = resolveMaxAge(env, parsed.params.maxAgeOverride)
     return new Response(renderCard(data, parsed.params), {
-      headers: {
-        'content-type': SVG_CONTENT_TYPE,
-        'cache-control': `public, max-age=${maxAge}, s-maxage=${maxAge}, stale-while-revalidate=${STALE_WHILE_REVALIDATE}`,
-        'x-cache': status,
-      },
+      headers: cardHeaders(status, resolveMaxAge(env, parsed.params.maxAgeOverride)),
     })
   } catch (error) {
     const failure = error instanceof StatsError ? error : new StatsError('upstream', String(error))
     return errorCard(failure.kind, parsed.params.style, failure.retryAfterMinutes)
+  }
+}
+
+/**
+ * How long a client may hold a card served from an expired entry.
+ *
+ * Short, because the figures are known to be behind and whatever broke upstream
+ * is usually over in minutes. Deliberately without `stale-while-revalidate`:
+ * that would let Camo keep showing the stale card past even this, which is the
+ * opposite of what is wanted while the service is trying to recover.
+ */
+const STALE_MAX_AGE = 600
+
+/**
+ * A card served from an expired entry is still a correct card, a few hours
+ * behind, and it is always the right answer over an error card. `X-Stale` is
+ * what makes that visible to anyone debugging, since the body looks normal.
+ */
+function cardHeaders(status: CacheStatus, maxAge: number): Record<string, string> {
+  const base = { 'content-type': SVG_CONTENT_TYPE, 'x-cache': status }
+  if (status === 'STALE') {
+    return { ...base, 'cache-control': `public, max-age=${STALE_MAX_AGE}`, 'x-stale': 'true' }
+  }
+  return {
+    ...base,
+    'cache-control': `public, max-age=${maxAge}, s-maxage=${maxAge}, stale-while-revalidate=${STALE_WHILE_REVALIDATE}`,
   }
 }
 

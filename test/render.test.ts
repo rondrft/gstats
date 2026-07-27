@@ -227,7 +227,11 @@ describe('languages', () => {
     expect(svg).toContain('xml:space="preserve"')
     // Name padded to five cells, bar padded to six, percentage right-aligned to
     // three. Every line is the same length, so the columns line up on their own.
-    expect(svg).toContain('ts    ██      41%')
+    // The bars are scaled against the leader, so the leader fills its six cells
+    // and the rest are visibly shorter — against 100% these were 2, 2, 1, 1.
+    expect(svg).toContain('ts    ██████  41%')
+    expect(svg).toContain('rs    ████    25%')
+    expect(svg).toContain('py    ██      17%')
     expect(svg).toContain('go    █       10%')
   })
 
@@ -347,3 +351,85 @@ describe('snapshot', () => {
 })
 
 const round = (n: number) => Math.round(n * 100) / 100
+
+/**
+ * The relationship the streak ring exists to communicate. A card reporting
+ * 37 against a record of 112 has to *look* like a third, and this pins the arc
+ * length to the fraction for the whole range rather than for one example.
+ */
+describe('ring arc length tracks the percentage', () => {
+  const arcOf = (svg: string) =>
+    [...svg.matchAll(/stroke-linecap="round" stroke-dasharray="([\d.]+) /g)].map((m) =>
+      Number(m[1]),
+    )
+
+  const streakArc = (current: number, longest: number) => {
+    const data = statsFixture({
+      streaks: {
+        current: { length: current, start: '2026-06-01', end: '2026-07-26' },
+        longest: { length: longest, start: '2024-01-02', end: '2024-04-22' },
+      },
+    })
+    return arcOf(renderCard(data, paramsFixture('username=x&hide=total,best,langs')))[0] ?? 0
+  }
+
+  it.each([
+    [0, 112, 0],
+    [28, 112, 0.25],
+    [37, 112, 37 / 112],
+    [56, 112, 0.5],
+    [84, 112, 0.75],
+    [112, 112, 1],
+  ])('draws %i/%i as %f of the arc', (current, longest, fraction) => {
+    expect(streakArc(current, longest) / ARC).toBeCloseTo(fraction, 3)
+  })
+
+  it('measures against the visible arc, not the whole circumference', () => {
+    // The distinction that would silently inflate every ring: the top wedge is
+    // never painted, so a full ring is ARC units, not CIRCUMFERENCE units.
+    expect(streakArc(112, 112)).toBeCloseTo(ARC, 2)
+    expect(ARC).toBeLessThan(CIRCUMFERENCE)
+  })
+
+  it('clamps a streak that somehow exceeds its own record', () => {
+    expect(streakArc(200, 112)).toBeCloseTo(ARC, 2)
+  })
+})
+
+/**
+ * The track is the unfilled part of the ring. It always covers the full arc, so
+ * if it reads as strongly as the progress the ring looks nearly complete
+ * whatever the value is — which is what happened on the light theme, where
+ * dimming an accent towards black produced a near-black on white.
+ */
+describe('ring track recedes into the background', () => {
+  const trackOf = (svg: string) =>
+    /<circle[^>]*stroke="(#[0-9a-fA-F]{6})" stroke-dasharray="134.65 35"/.exec(svg)?.[1] ?? ''
+
+  const relativeLuminance = (hex: string) => {
+    const channel = (i: number) => {
+      const v = Number.parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255
+      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
+    }
+    return 0.2126 * channel(0) + 0.7152 * channel(1) + 0.0722 * channel(2)
+  }
+  const contrast = (a: string, b: string) => {
+    const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x)
+    return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05)
+  }
+
+  it.each([
+    ['phosphor', '#080D08'],
+    ['light', '#FFFFFF'],
+    ['ice', '#050B14'],
+    ['amber', '#0F0A02'],
+    ['mono', '#000000'],
+  ])('stays faint against the %s background', (theme, background) => {
+    const track = trackOf(renderCard(statsFixture(), paramsFixture(`username=x&theme=${theme}`)))
+
+    expect(track).not.toBe('')
+    // Anything above about 3:1 stops reading as absence and starts reading as a
+    // second value. The light theme used to sit at 18:1.
+    expect(contrast(track, background)).toBeLessThan(3)
+  })
+})

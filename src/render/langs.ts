@@ -90,6 +90,8 @@ export function abbreviate(language: string): string {
  * the same width: the `bars` columns are placed on the same cell grid the
  * `blocks` characters sit on.
  */
+export { barFraction }
+
 export function measureLangs(languages: readonly LanguageStat[], emptyLabel: string): LangsContent {
   if (languages.length === 0) {
     return { lineCount: 1, width: langsTextWidth(emptyLabel) }
@@ -128,20 +130,30 @@ export function langsBlock({
     )
   }
 
+  // The list arrives sorted, but taking the maximum is what makes the bars
+  // correct rather than what makes them happen to be correct.
+  const leader = Math.max(...languages.map((language) => language.pct))
+
   return languages
     .map((language, index) => {
       const y = round(firstBaseline + index * lineHeight)
       return style === 'bars'
-        ? barLine(language, x, y, text, muted, fallbackColor)
-        : blockLine(language, x, y, text)
+        ? barLine(language, x, y, leader, text, muted, fallbackColor)
+        : blockLine(language, x, y, leader, text)
     })
     .join('')
 }
 
 /** `ts    ██████  41%` — one text node, alignment courtesy of the font. */
-function blockLine(language: LanguageStat, x: number, y: number, text: string): string {
+function blockLine(
+  language: LanguageStat,
+  x: number,
+  y: number,
+  leader: number,
+  text: string,
+): string {
   const name = abbreviate(language.name).slice(0, NAME_WIDTH).padEnd(NAME_WIDTH)
-  const bar = BLOCK.repeat(blockCount(language.pct)).padEnd(MAX_BLOCKS)
+  const bar = BLOCK.repeat(blockCount(language.pct, leader)).padEnd(MAX_BLOCKS)
   const percent = `${Math.round(language.pct * 100)}`.padStart(3)
   const line = `${name} ${bar} ${percent}%`
   return (
@@ -151,11 +163,25 @@ function blockLine(language: LanguageStat, x: number, y: number, text: string): 
 }
 
 /**
- * A language that made the list gets at least one cell even when it rounds to
- * zero; the percentage beside it carries the precision.
+ * Bar length, as a share of the *leading* language rather than of the whole.
+ *
+ * Scaling against 100% wastes almost all the resolution. Six cells over the full
+ * range makes one cell worth 17 percentage points, and a normal breakdown —
+ * 41/25/17/10 — collapses to 2, 2, 1, 1: the bars all look the same and carry no
+ * information the percentages beside them do not already give.
+ *
+ * Against the leader, the same breakdown reads 6, 4, 2, 1. The trade is that a
+ * bar is no longer comparable between two cards, only within one. That is the
+ * comparison a reader actually makes, and the percentage is right there for the
+ * other one.
  */
-function blockCount(pct: number): number {
-  return Math.max(1, Math.min(MAX_BLOCKS, Math.round(pct * MAX_BLOCKS)))
+function barFraction(pct: number, leader: number): number {
+  return leader <= 0 ? 0 : Math.min(1, pct / leader)
+}
+
+/** A language that made the list gets at least one cell, however small it is. */
+function blockCount(pct: number, leader: number): number {
+  return Math.max(1, Math.min(MAX_BLOCKS, Math.round(barFraction(pct, leader) * MAX_BLOCKS)))
 }
 
 /**
@@ -172,13 +198,14 @@ function barLine(
   language: LanguageStat,
   x: number,
   y: number,
+  leader: number,
   text: string,
   muted: string,
   fallbackColor: string,
 ): string {
   const name = abbreviate(language.name).slice(0, NAME_WIDTH)
   const barX = x + (NAME_WIDTH + 1) * CELL
-  const filled = Math.max(1, Math.round(language.pct * BAR_WIDTH))
+  const filled = Math.max(1, Math.round(barFraction(language.pct, leader) * BAR_WIDTH))
   const color = language.color ?? fallbackColor
   const percent = `${Math.round(language.pct * 100)}%`
   const percentX = barX + BAR_WIDTH + CELL

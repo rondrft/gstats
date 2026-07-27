@@ -24,7 +24,7 @@
 import type { StatsData } from '../../github/types'
 import { credit, frame, motion, plate, round, svgDocument, text } from '../chrome'
 import { mix } from '../color'
-import { abbreviate } from '../langs'
+import { abbreviate, barFraction } from '../langs'
 import { layoutRow } from '../layout'
 import { textWidth } from '../metrics'
 import { describe, visibleStats, wantsLanguages } from './modules'
@@ -256,13 +256,14 @@ function panel(
 
   const first = middle - ((languages.length - 1) * LANG_ROW_HEIGHT) / 2
   const barX = x + labelWidth + 6
+  const leader = Math.max(...languages.map((language) => language.pct))
 
   return languages
     .map((language, index) => {
       const y = round(first + index * LANG_ROW_HEIGHT)
-      // Width is the share of the whole, not of the leader, so the bars stay
-      // comparable between cards.
-      const filled = Math.max(1, round(language.pct * BAR_WIDTH))
+      // Share of the leading language, not of the whole: see `barFraction`.
+      // Against 100% a normal breakdown draws four bars of nearly equal width.
+      const filled = Math.max(1, round(barFraction(language.pct, leader) * BAR_WIDTH))
       return (
         text(abbreviate(language.name), { x, y: y + 3, size: LANG_SIZE, fill: style.text }) +
         `<rect x="${round(barX)}" y="${round(y - 2)}" width="${BAR_WIDTH}" height="${BAR_HEIGHT}" ` +

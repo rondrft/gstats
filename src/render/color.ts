@@ -54,19 +54,32 @@ function toHex({ r, g, b }: Rgb): string {
 /**
  * Derives the unfilled portion of a ring from its progress colour.
  *
- * The track has to stay visible against the card background without competing
- * with the progress arc, so the hue is preserved and the brightness is cut to a
- * fraction of the original. Deriving instead of theming means a caller who
- * passes `?ring=%23ff0088` gets a coherent track for free.
+ * The track is a faint version of the arc: same hue, close enough to the
+ * background to read as absence rather than as a second value. Deriving it
+ * instead of theming it means a caller who passes `?ring=%23ff0088` gets a
+ * coherent track for free.
+ *
+ * It is a step *from the background towards the colour*, not a dimming of the
+ * colour. Those are the same thing on a dark theme and opposites on a light one,
+ * which is a bug this shipped with: multiplying `#BC4C00` by 0.22 gives
+ * `#291100`, a near-black on white with 18:1 contrast against the background.
+ * Since the track always paints the full arc, that made a 33% streak ring read
+ * as about 80% full — the track was the boldest thing in it. Mixing from the
+ * background gives 1.4:1, in line with what the dark themes always had.
  *
  * Non-hex inputs (`none`, `transparent`, or anything that failed validation)
- * are returned unchanged — there is nothing sensible to dim.
+ * fall back to the colour itself; there is nothing to interpolate between.
  */
-export function trackColor(color: string, factor = 0.22): string {
+export function trackColor(color: string, background: string, factor = 0.22): string {
   if (KEYWORDS.has(color.toLowerCase())) return color
-  const rgb = parseHex(color)
-  if (rgb === null) return color
-  return toHex({ r: rgb.r * factor, g: rgb.g * factor, b: rgb.b * factor })
+  if (KEYWORDS.has(background.toLowerCase())) {
+    // No background to recede into — `bg=transparent` sits on whatever the page
+    // is. Dimming the colour is the only option left, and it is at least
+    // predictable.
+    const rgb = parseHex(color)
+    return rgb === null ? color : toHex({ r: rgb.r * factor, g: rgb.g * factor, b: rgb.b * factor })
+  }
+  return mix(background, color, factor)
 }
 
 /**

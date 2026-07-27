@@ -273,7 +273,11 @@ export class KvRateLimitStore {
 
   async write(state: RateLimitState, observedAt: number): Promise<void> {
     if (state.remaining === null) return
+
+    let previous: StoredRateLimit | null = null
     try {
+      previous = await this.read()
+      if (!shouldSample(previous, state.remaining, observedAt)) return
       await this.namespace.put(
         RATE_LIMIT_KEY,
         JSON.stringify({ ...state, observedAt } satisfies StoredRateLimit),
@@ -285,4 +289,34 @@ export class KvRateLimitStore {
       // Best effort. A missing reading degrades the fallback, not the response.
     }
   }
+}
+
+/** Never write this reading more often than once every five minutes... */
+const SAMPLE_INTERVAL_MS = 5 * 60_000
+
+/** ...unless the budget just fell past here, which nobody should wait to see. */
+const URGENT_REMAINING = 1_000
+
+/**
+ * Whether a new reading is worth a write.
+ *
+ * This used to be written on every cache miss, which made it *half* of all the
+ * KV writes the service performs — and KV writes, not the GitHub quota, are what
+ * the free plan runs out of first. It feeds `/health` and the low-quota
+ * fallback, and neither needs a reading accurate to the request.
+ *
+ * Sampling every five minutes halves the write cost of an active profile. The
+ * threshold crossing is the exception: an instance running out of quota should
+ * be visible at `/health` immediately, not up to five minutes later. Once it is
+ * already below the line the interval takes over again, because that is exactly
+ * when the instance is busiest and least able to afford a write per request.
+ */
+export function shouldSample(
+  previous: StoredRateLimit | null,
+  remaining: number,
+  now: number,
+): boolean {
+  if (previous === null || previous.remaining === null) return true
+  if (previous.remaining >= URGENT_REMAINING && remaining < URGENT_REMAINING) return true
+  return now - previous.observedAt >= SAMPLE_INTERVAL_MS
 }

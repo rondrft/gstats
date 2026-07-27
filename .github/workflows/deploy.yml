@@ -52,10 +52,16 @@ jobs:
       - run: pnpm lint
       - run: pnpm test
 
+      # The short commit, so /health can be compared against `git log` by eye.
+      # `github.sha` is the full 40 characters and `pnpm deploy` uses
+      # `rev-parse --short`; two formats for one identifier is one too many.
+      - id: build
+        run: echo "sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+
       # The commit becomes the build identifier: it labels the instance at
       # /health and namespaces the cache, so the release does not read entries
       # written by its predecessor.
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: deploy --var SERVICE_VERSION:${{ github.sha }}
+          command: deploy --var SERVICE_VERSION:${{ steps.build.outputs.sha }}

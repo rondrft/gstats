@@ -48,6 +48,8 @@ export interface RingOptions {
   pct: number
   /** Colour of the progress arc. */
   color: string
+  /** Card background, which the track is derived from rather than dimmed to. */
+  background: string
   /** Index used to stagger the draw animation and name its keyframes. */
   index: number
   animate: boolean
@@ -60,7 +62,7 @@ export interface RingParts {
   keyframes: string
 }
 
-export function ring({ cx, cy, pct, color, index, animate }: RingOptions): RingParts {
+export function ring({ cx, cy, pct, color, background, index, animate }: RingOptions): RingParts {
   const filled = round(ARC * Math.min(1, Math.max(0, pct)))
   // Centres arrive from the layout as reals, so they are rounded here rather
   // than assumed to be whole numbers.
@@ -73,7 +75,7 @@ export function ring({ cx, cy, pct, color, index, animate }: RingOptions): RingP
   // The track's dash pattern has period `CIRCUMFERENCE`, so it repeats exactly
   // once around the circle and the single gap lands at the top.
   const track =
-    `<circle ${common} stroke="${trackColor(color)}" ` +
+    `<circle ${common} stroke="${trackColor(color, background)}" ` +
     `stroke-dasharray="${round(ARC)} ${GAP}" stroke-dashoffset="${restingOffset}" ` +
     `transform="${rotation}"/>`
 

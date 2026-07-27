@@ -23,6 +23,7 @@ function formatRange(start: string, end: string): string {
 
 afterEach(() => {
   vi.unstubAllGlobals()
+  vi.restoreAllMocks()
 })
 
 describe('routing', () => {
@@ -480,5 +481,106 @@ describe('POST /purge', () => {
     expect(statuses.filter((status) => status === 429).length).toBeGreaterThan(0)
     // The refusals come after the allowance, not interleaved with it.
     expect(statuses.slice(0, PURGE_LIMIT_PER_MINUTE).every((status) => status === 200)).toBe(true)
+  })
+})
+
+/**
+ * The step that turns a quota problem into an outage. Entries survive seven days
+ * against six hours of freshness precisely so that when GitHub is unreachable
+ * there is still something correct to serve — a card a few hours behind beats an
+ * error card, every time.
+ */
+describe('stale-while-error', () => {
+  const breakUpstream = (kind: 'rate-limited' | 'server' | 'network') => {
+    if (kind === 'rate-limited') {
+      return stubGitHub({
+        status: 403,
+        headers: { 'x-ratelimit-remaining': '0' },
+        respond: () => ({ errors: [{ type: 'RATE_LIMITED' }] }),
+      })
+    }
+    if (kind === 'server') {
+      return stubGitHub({ status: 502, respond: () => ({ errors: [{ message: 'bad gateway' }] }) })
+    }
+    const dead = vi.fn(() => Promise.reject(new Error('connection reset')))
+    vi.stubGlobal('fetch', dead)
+    return {
+      fetch: dead,
+      get calls() {
+        return dead.mock.calls.length
+      },
+    }
+  }
+
+  /**
+   * Freshness is six hours, so reaching the failure path means being past it.
+   * Moving the clock is the only honest way to get there — an entry that is
+   * still fresh is answered from KV and never attempts a fetch at all.
+   */
+  const afterFreshness = () => {
+    const later = Date.now() + (KV_FRESH_SECONDS + 3600) * 1000
+    vi.spyOn(Date, 'now').mockReturnValue(later)
+  }
+
+  it.each(['rate-limited', 'server', 'network'] as const)(
+    'serves the expired entry when GitHub fails with a %s error',
+    async (kind) => {
+      const login = `stale${kind.replace('-', '')}`
+      stubGitHub()
+      expect((await get(`/api?username=${login}`)).headers.get('x-cache')).toBe('MISS')
+
+      vi.unstubAllGlobals()
+      afterFreshness()
+      breakUpstream(kind)
+
+      const response = await get(`/api?username=${login}`)
+      const body = await response.text()
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get('x-cache')).toBe('STALE')
+      expect(response.headers.get('x-stale')).toBe('true')
+      expect(response.headers.get('cache-control')).toBe('public, max-age=600')
+      // A real card, not the failure card.
+      expect(body).toContain('contributions')
+      expect(body).not.toContain('upstream error')
+      expect(body).not.toContain('rate limited')
+    },
+  )
+
+  /**
+   * `stale-while-revalidate` would let Camo keep showing the stale card past
+   * even the ten minutes, which is the opposite of what is wanted while the
+   * service is trying to recover.
+   */
+  it('does not tell clients to hold a stale card beyond its own lifetime', async () => {
+    stubGitHub()
+    await get('/api?username=staleswr')
+    vi.unstubAllGlobals()
+    afterFreshness()
+    breakUpstream('server')
+
+    const response = await get('/api?username=staleswr')
+
+    expect(response.headers.get('x-cache')).toBe('STALE')
+    expect(response.headers.get('cache-control')).not.toContain('stale-while-revalidate')
+  })
+
+  it('falls through to the error card only when nothing is cached', async () => {
+    breakUpstream('server')
+
+    const response = await get('/api?username=nothingcached')
+
+    expect(response.status).toBe(200)
+    expect(response.headers.get('x-stale')).toBeNull()
+    await expect(response.text()).resolves.toContain('upstream error')
+  })
+
+  it('marks a healthy card as neither stale nor cached-from-error', async () => {
+    stubGitHub()
+
+    const response = await get('/api?username=healthy')
+
+    expect(response.headers.get('x-stale')).toBeNull()
+    expect(response.headers.get('cache-control')).toContain('stale-while-revalidate')
   })
 })
