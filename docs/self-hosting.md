@@ -323,6 +323,13 @@ two limits was hit: `requests` for the per-minute one, `profiles` for the
 distinct-login budget. Raise the relevant variable in *Protect your quota* if
 the traffic is legitimate.
 
+**The logs say `kv write failed`.** The daily KV write allowance is gone. Cards
+are still being served — every write here is best effort and a card is built
+before anything tries to store it — but nothing is being cached, so the figures
+are frozen at whatever was last stored and every request is now spending GitHub
+quota. It clears at midnight UTC; to fix it sooner, cut `WARM_USERS` or move to
+Workers Paid. See [limits.md](limits.md#the-cascade).
+
 **`/health` says `"status": "warning"`.** More than 80% of the day's KV write
 allowance is gone. Check `warming.configured` first — a warmed profile costs 96
 writes a day, roughly a tenth of the free allowance each, and `warm:last-run`

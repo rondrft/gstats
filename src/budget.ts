@@ -111,10 +111,11 @@ async function flush(namespace: KVNamespace, current: Tally): Promise<void> {
       expirationTtl: RECORD_TTL_SECONDS,
     })
     current.pending = 0
-  } catch {
+  } catch (error) {
     // Keep the pending count and try again on the next write. If the namespace
     // is refusing writes the figure is academic anyway — that is the condition
-    // it exists to predict.
+    // it exists to predict, and now also the condition it reports.
+    recordWriteFailure('budget', error)
   }
 }
 
@@ -122,6 +123,65 @@ async function readCount(namespace: KVNamespace, key: string): Promise<number> {
   const raw = await namespace.get(key)
   const value = Number.parseInt(raw ?? '0', 10)
   return Number.isFinite(value) && value > 0 ? value : 0
+}
+
+/**
+ * How often one isolate will report that writes are failing.
+ *
+ * The condition is not rare once it starts — an exhausted allowance fails every
+ * write for the rest of the day, so a line per failure would be a line per cache
+ * miss. One a minute per isolate, carrying the count it stands for, says the
+ * same thing without burying every other log the instance produces.
+ */
+const FAILURE_REPORT_INTERVAL_MS = 60_000
+
+let failuresSinceReport = 0
+let lastReportedAt = 0
+
+/**
+ * Forgets what this isolate has reported.
+ *
+ * For tests, which share module state within a file and would otherwise see one
+ * test's throttle suppress the next one's log.
+ */
+export function forgetWriteFailures(): void {
+  failuresSinceReport = 0
+  lastReportedAt = 0
+}
+
+/**
+ * Notes a KV write that did not happen.
+ *
+ * Every caller swallows the error, and should: a lost write costs one extra
+ * upstream call, while failing the request costs a reader a broken image, and
+ * `docs/limits.md` is explicit that the free plan's expected failure is "the
+ * figures freeze", not "every card breaks at once". But swallowed is not the
+ * same as unnoticed. Without this the only evidence that an instance had run out
+ * of writes was cards quietly going stale — which is also what a healthy quiet
+ * instance looks like.
+ *
+ * This is the other half of the `writes` figure at `/health`: that one says the
+ * allowance is nearly gone, this one says it is gone.
+ */
+export function recordWriteFailure(
+  operation: string,
+  error: unknown,
+  now: number = Date.now(),
+): void {
+  failuresSinceReport += 1
+
+  if (lastReportedAt !== 0 && now - lastReportedAt < FAILURE_REPORT_INTERVAL_MS) return
+
+  const reason = error instanceof Error ? error.message : String(error)
+  const alsoSuppressed =
+    failuresSinceReport > 1 ? ` (and ${failuresSinceReport - 1} more since the last report)` : ''
+
+  // `warn` rather than `error`: the service is still answering every request
+  // correctly, with figures that are merely older than they would have been.
+  console.warn(`kv write failed [${operation}]: ${reason}${alsoSuppressed}`)
+
+  lastReportedAt = now
+  failuresSinceReport = 0
 }
 
 export interface WriteBudget {

@@ -12,7 +12,7 @@
  * rather than with an error — see the fallback in `stats.ts`.
  */
 
-import { recordWrite } from './budget'
+import { recordWrite, recordWriteFailure } from './budget'
 import type { RateLimitState, StatsData } from './github/types'
 import type { DataParams } from './params'
 
@@ -187,9 +187,11 @@ export class KvStatsCache implements StatsCache {
         expirationTtl: KV_EXPIRE_SECONDS,
       })
       await recordWrite(this.namespace)
-    } catch {
+    } catch (error) {
       // Losing a write costs one extra upstream call; failing the request costs
-      // the reader a broken image.
+      // the reader a broken image. The card the caller is waiting for is already
+      // built from data this function was only trying to store.
+      recordWriteFailure('stats-cache', error)
     }
   }
 
@@ -344,8 +346,9 @@ export class KvRateLimitStore {
         expirationTtl: 7_200,
       })
       await recordWrite(this.namespace, observedAt)
-    } catch {
+    } catch (error) {
       // Best effort. A missing reading degrades the fallback, not the response.
+      recordWriteFailure('quota-reading', error)
     }
   }
 }

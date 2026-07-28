@@ -16,7 +16,7 @@
  * spend the shared quota gently.
  */
 
-import { recordWrite } from './budget'
+import { recordWrite, recordWriteFailure } from './budget'
 import type { StatsCache } from './cache'
 import type { GitHubClient } from './github/client'
 import { parseParams } from './params'
@@ -180,8 +180,9 @@ export class KvWarmStore {
     try {
       await this.namespace.put(LAST_RUN_KEY, JSON.stringify(run), { expirationTtl: LAST_RUN_TTL })
       await recordWrite(this.namespace, run.ranAt)
-    } catch {
+    } catch (error) {
       // Losing the record costs visibility, not correctness.
+      recordWriteFailure('warm-last-run', error)
     }
   }
 }

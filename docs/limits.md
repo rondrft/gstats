@@ -132,6 +132,24 @@ budget serves increasingly old cards instead of breaking, which is the right
 direction, and `/health` shows the quota falling while it happens. It is still a
 condition to fix rather than to live in.
 
+**Nothing in that sequence returns an error to a reader.** Every `put` in the
+service is wrapped, the card is built from the fetched data before anything
+tries to store it, and a refused write cannot reach the response. That is
+enforced rather than assumed: `test/kv-failure.test.ts` runs the whole service
+against a namespace whose writes always fail, and checks that the cards still
+carry figures — a status check would pass on an error card, which is exactly the
+outcome being ruled out.
+
+Each of those swallowed failures is reported to the logs, once a minute per
+isolate, naming the operation and the reason:
+
+```
+kv write failed [stats-cache]: KV PUT failed: 429 Too Many Requests (and 41 more since the last report)
+```
+
+`wrangler tail` is where that shows up. `/health` warns that the allowance is
+nearly gone; this says it is gone.
+
 ## Seeing it coming
 
 Softening the cascade is not the same as noticing it. Until recently there was

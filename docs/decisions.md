@@ -268,6 +268,37 @@ The same reasoning is why the low-quota threshold is the trigger rather than a
 timer. Timers cost the same whether anything is happening or not; a threshold
 costs nothing until something is.
 
+### A failed write is swallowed, and said out loud
+
+`src/budget.ts`, and every `catch` around a `put`
+
+Every KV write in this service is best effort. Losing one costs one extra
+upstream call on the next request; failing the request costs a reader a broken
+image in a README they do not control. The trade is not close, and it is the
+same one `docs/limits.md` describes as the expected shape of running out on the
+free plan: **the figures freeze, they do not disappear.** A card is built from
+the data before anything tries to store it, so a refused `put` cannot reach the
+response.
+
+What was missing was the other half. Swallowed is not the same as unnoticed, and
+the symptom of an instance that had exhausted its allowance — cards quietly
+going stale — is indistinguishable from a healthy instance nobody is visiting.
+Every one of those catches now reports, with the operation that failed and the
+reason.
+
+Throttled to one report a minute per isolate, carrying the count it stands for.
+An exhausted allowance does not fail one write, it fails every write for the
+rest of the day, so a line per failure would be a line per cache miss and would
+bury everything else the instance logs.
+
+Together with the `writes` figure at `/health` that makes both halves visible:
+that one says the allowance is nearly gone, this one says it is gone.
+
+The tests for this are worth more than usual and were nearly worthless. `/api`
+answers `200` for an error card too, so asserting the status proves nothing —
+`test/kv-failure.test.ts` asserts that the body carries figures, which is the
+thing that actually distinguishes "frozen" from "broken".
+
 ### The write budget is counted in memory and sampled into KV
 
 `src/budget.ts`
