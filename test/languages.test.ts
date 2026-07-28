@@ -7,6 +7,7 @@ import {
   type RepoLanguages,
   rankLanguages,
   recencyWeight,
+  sampleRepos,
 } from '../src/languages'
 
 const NOW = Date.parse('2026-07-27T00:00:00Z')
@@ -15,25 +16,28 @@ const DAY = 86_400_000
 const daysAgo = (days: number) => new Date(NOW - days * DAY).toISOString()
 
 function repo(
-  name: string,
+  _name: string,
   edges: [string, number][],
   options: { pushedAt?: string; primary?: string } = {},
 ): RepoLanguages {
   return {
-    name,
     pushedAt: options.pushedAt ?? daysAgo(10),
     primaryLanguage: options.primary ?? edges[0]?.[0] ?? null,
     edges: edges.map(([language, size]) => ({ name: language, color: null, size })),
   }
 }
 
+/**
+ * Ranking now reads the stored sample rather than the fetched repositories, so
+ * the fixtures go through the same compaction production does — which is also
+ * where the recency weight is resolved, and so where `NOW` is spent.
+ */
 function rank(repos: RepoLanguages[], overrides: Partial<RankOptions> = {}) {
-  return rankLanguages(repos, {
+  return rankLanguages(sampleRepos(repos, NOW), {
     mode: 'bytes',
     limit: 8,
     exclude: [],
     include: [],
-    now: NOW,
     ...overrides,
   })
 }
@@ -316,6 +320,91 @@ describe('degenerate input', () => {
     )
 
     expect(rank(repos, { limit: 3 })).toHaveLength(3)
+  })
+})
+
+/**
+ * What the cache now carries, and the only thing that made moving the ranking
+ * out of the fetch a real trade rather than a free one.
+ *
+ * The obvious store — the fetched `RepoLanguages[]` — is about 53 KB at the
+ * pagination cap, nearly all of it the same few language names and Linguist
+ * colours repeated across three thousand edges. Interning them takes a real
+ * account at the cap to roughly 11 KB, which is what makes this affordable on
+ * every profile rather than only on the ones using a non-default setting.
+ *
+ * The ceiling that matters is not this: KV bills writes per operation, not per
+ * byte, so a larger entry costs nothing against the budget in docs/limits.md.
+ * The bound here exists so that the *next* field added to a repository is
+ * measured rather than assumed.
+ */
+describe('the stored sample', () => {
+  const LANGUAGES = [
+    'TypeScript',
+    'JavaScript',
+    'Python',
+    'Rust',
+    'Go',
+    'Ruby',
+    'Java',
+    'Kotlin',
+    'Swift',
+    'C',
+    'C++',
+    'C#',
+    'PHP',
+    'Elixir',
+    'Haskell',
+    'Lua',
+    'Perl',
+    'Scala',
+    'Clojure',
+    'Zig',
+    'Nix',
+  ]
+
+  /** The pagination cap: 300 repositories of ten languages each. */
+  const atCap = Array.from({ length: 300 }, (_, index) =>
+    repo(
+      `r${index}`,
+      Array.from({ length: 10 }, (_unused, slot): [string, number] => [
+        LANGUAGES[(index * 7 + slot * 3) % LANGUAGES.length] ?? 'C',
+        1_000_000 - slot * 1000,
+      ]),
+    ),
+  )
+
+  it('interns names and colours instead of repeating them', () => {
+    const sample = sampleRepos(atCap, NOW)
+
+    expect(sample.repos).toHaveLength(300)
+    // One table entry per distinct language, not one per edge.
+    expect(sample.langs.length).toBeLessThanOrEqual(LANGUAGES.length)
+  })
+
+  /**
+   * The saving, stated as the ratio rather than as a number somebody would have
+   * to re-measure. `atCap` is deliberately harsher than any real account — every
+   * one of its 300 repositories carries the full ten languages — so the naive
+   * form here is worse than the 53 KB a real account at the cap produces, and
+   * the ratio is the honest thing to hold onto.
+   */
+  it('costs a fraction of storing what was fetched', () => {
+    const interned = JSON.stringify(sampleRepos(atCap, NOW)).length
+    const naive = JSON.stringify(atCap).length
+
+    expect(interned).toBeLessThan(naive / 3)
+  })
+
+  it('stays small enough to sit in every entry', () => {
+    const bytes = new TextEncoder().encode(JSON.stringify(sampleRepos(atCap, NOW))).length
+
+    // 41 KB for this synthetic ceiling; a real account at the cap measures about
+    // 11 KB. Both are nothing against KV's 25 MB per value, and KV bills writes
+    // per operation rather than per byte, so neither touches the budget in
+    // docs/limits.md. The bound is here so the next field added to a repository
+    // is measured rather than assumed.
+    expect(bytes).toBeLessThan(64 * 1024)
   })
 })
 

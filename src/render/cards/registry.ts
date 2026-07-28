@@ -29,7 +29,7 @@
  * ---------------------------------------------------------------------------
  */
 
-import type { StatsData } from '../../github/types'
+import type { CardData } from '../../github/types'
 import type { Strings } from '../../i18n'
 import type { CardParams } from '../../params'
 
@@ -42,7 +42,7 @@ export interface RenderOptions {
 export interface CardRenderer {
   /** Stable public identifier. Once shipped, it exists forever. */
   id: string
-  render(data: StatsData, options: RenderOptions): string
+  render(data: CardData, options: RenderOptions): string
 }
 
 /**

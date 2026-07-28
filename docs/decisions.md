@@ -213,6 +213,43 @@ What it cannot reach is the copy Camo is holding. That is governed by
 `Cache-Control`, not by KV, and is the *only* reason a card can look stale after
 a deploy — worth knowing before hunting for a cache bug that is not there.
 
+### The cache holds repositories, and the language ranking happens at render time
+
+`src/languages.ts`, `src/render/cards/index.ts`, `src/cache.ts`
+
+The same argument as "KV holds data, never rendered SVG", carried one step
+further. `lang_mode`, `langs_count`, `exclude_langs` and `include_langs` were all
+in the cache key, so every combination somebody wrote into a URL bought its own
+round of GitHub calls — for repositories the instance already held. None of those
+four changes the request sent upstream. They change how its answer is read.
+
+So the entry holds the repositories and the ranking runs when the card is drawn,
+which takes all four out of the key the way `theme` always has been.
+
+**The cost is entry size, and it had to be measured rather than assumed** —
+`pending.md` carried this for months with "it may be the wrong trade" attached,
+which was the right instinct. Storing the fetched `RepoLanguages[]` as it comes
+is about **53 KB** at the 300-repository pagination cap, nearly all of it the
+same few language names and Linguist colours written out across three thousand
+edges. Interning them into a table and referring to them by index takes a real
+account at the cap to **11 KB**, and a typical one to under 2 KB. The same trade
+`CompactCalendar` makes, for the same reason.
+
+That is affordable, and the reason is worth stating precisely, because the
+intuition points at the wrong resource: **KV bills writes per operation, not per
+byte.** A larger entry costs nothing against the budget in
+[limits.md](limits.md), which is the thing that actually runs out. The value
+limit is 25 MB and the free plan's storage is 1 GB against roughly 3 MB at 240
+active profiles. What the change *saves* is writes, by collapsing every ranking
+variant of a profile onto one entry.
+
+One thing it does not buy, contrary to what it looks like it should: it does not
+prevent a stampede after a release. The cache key carries the deploy's commit, so
+**every deploy already retires every entry** whether or not anything about
+languages changed. What it removes is the need to bump `SCHEMA_VERSION` when the
+ranking changes — which matters under `wrangler dev`, where the build id is a
+constant, and is exactly the case that version exists for.
+
 ### `SCHEMA_VERSION` exists alongside the build id, and reads are validated
 
 `src/cache.ts`
@@ -365,9 +402,13 @@ for whatever fraction of the interval they happened to arrive in.
 `src/purge.ts`, `src/cache.ts`
 
 A login does not have *an* entry. It has one per combination of the parameters
-that shape what is fetched — `langs_count`, `lang_mode`, the exclusions, `hide`.
-Deleting one would leave a stale card at whichever URL the reader actually used,
-which is the failure that is hardest to notice because it looks like it worked.
+that shape what is stored — `hide`, and `tz`. Deleting one would leave a stale
+card at whichever URL the reader actually used, which is the failure that is
+hardest to notice because it looks like it worked.
+
+There used to be four more, and the prefix is what made removing them a
+non-event: purging never named the variants, so it did not have to learn that
+there are fewer of them.
 
 Entries under other builds are unreachable from the current one and are left to
 their own expiry.

@@ -21,7 +21,7 @@
  *            terminal design makes about its full rings.
  */
 
-import type { StatsData } from '../../github/types'
+import type { CardData } from '../../github/types'
 import { credit, frame, motion, plate, round, svgDocument, text } from '../chrome'
 import { mix } from '../color'
 import { abbreviate, barFraction } from '../langs'
@@ -57,7 +57,7 @@ const LANG_ROW_HEIGHT = 13
 const BAR_WIDTH = 46
 const BAR_HEIGHT = 5
 
-function renderGauge(data: StatsData, { params, strings }: RenderOptions): string {
+function renderGauge(data: CardData, { params, strings }: RenderOptions): string {
   const { style } = params
   const stats = visibleStats(data, params, strings)
   const showLangs = wantsLanguages(params)
@@ -140,7 +140,7 @@ function renderGauge(data: StatsData, { params, strings }: RenderOptions): strin
 }
 
 /** See the header: each of these is a deliberate choice, not a default. */
-function needleFraction(module: string, data: StatsData): number {
+function needleFraction(module: string, data: CardData): number {
   if (module === 'streak') {
     const best = data.streaks.longest.length
     return best === 0 ? 0 : clamp(data.streaks.current.length / best)

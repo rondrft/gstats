@@ -13,10 +13,9 @@
  * visible amount, and the quota saved is better spent on other users.
  */
 
-import type { LangMode, RepoLanguages } from '../languages'
-import { rankLanguages } from '../languages'
+import type { RepoLanguages, RepoSample } from '../languages'
+import { sampleRepos } from '../languages'
 import type { GitHubClient } from './client'
-import type { LanguageStat } from './types'
 import { StatsError } from './types'
 
 const MAX_PAGES = 3
@@ -33,7 +32,6 @@ const QUERY = `query($login: String!, $after: String) {
     ) {
       pageInfo { hasNextPage endCursor }
       nodes {
-        name
         pushedAt
         primaryLanguage { name }
         languages(first: 10, orderBy: { field: SIZE, direction: DESC }) {
@@ -49,7 +47,6 @@ interface LanguagesPayload {
     repositories: {
       pageInfo: { hasNextPage: boolean; endCursor: string | null }
       nodes: ({
-        name: string
         pushedAt: string | null
         primaryLanguage: { name: string } | null
         languages: {
@@ -67,23 +64,19 @@ interface LanguagesPayload {
  */
 const HEX_COLOR = /^#[0-9a-fA-F]{6}$/
 
-export interface LanguagesOptions {
-  /** How many entries to return, after exclusions. */
-  limit: number
-  /** Lowercased language names to drop, on top of the defaults. */
-  exclude: readonly string[]
-  /** Lowercased language names to re-admit from the defaults. */
-  include: readonly string[]
-  mode: LangMode
-  /** Reference time for the recency weight, in epoch milliseconds. */
-  now: number
-}
-
+/**
+ * Fetches the account's repositories and compacts them for storage.
+ *
+ * Nothing here depends on how the caller wants them ranked. That is deliberate:
+ * the ranking parameters used to reach this far and put four more values in the
+ * cache key, so the same repositories were fetched again for every combination
+ * of them somebody wrote into a URL.
+ */
 export async function fetchLanguages(
   client: GitHubClient,
   login: string,
-  options: LanguagesOptions,
-): Promise<LanguageStat[]> {
+  now: number,
+): Promise<RepoSample> {
   const repos: RepoLanguages[] = []
   let cursor: string | null = null
 
@@ -99,7 +92,6 @@ export async function fetchLanguages(
     for (const repository of repositories.nodes) {
       if (repository === null) continue
       repos.push({
-        name: repository.name,
         pushedAt: repository.pushedAt,
         primaryLanguage: repository.primaryLanguage?.name ?? null,
         edges: repository.languages.edges.filter(isEdge).map((edge) => ({
@@ -115,7 +107,7 @@ export async function fetchLanguages(
     if (cursor === null) break
   }
 
-  return rankLanguages(repos, options)
+  return sampleRepos(repos, now)
 }
 
 function isEdge<T>(edge: T | null): edge is T {

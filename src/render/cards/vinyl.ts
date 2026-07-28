@@ -13,7 +13,7 @@
  * concentric circles stop reading as a record and start reading as a target.
  */
 
-import type { StatsData } from '../../github/types'
+import type { CardData } from '../../github/types'
 import { credit, frame, motion, plate, round, svgDocument, text } from '../chrome'
 import { mix } from '../color'
 import { abbreviate } from '../langs'
@@ -40,7 +40,7 @@ const TOTAL_SIZE = 15
 /** One revolution every eight seconds: present, but never the loudest thing. */
 const SPIN_SECONDS = 8
 
-function renderVinyl(data: StatsData, { params, strings }: RenderOptions): string {
+function renderVinyl(data: CardData, { params, strings }: RenderOptions): string {
   const { style } = params
   const stats = visibleStats(data, params, strings)
   const showLangs = wantsLanguages(params)
@@ -85,7 +85,7 @@ function renderVinyl(data: StatsData, { params, strings }: RenderOptions): strin
 function disc(
   cx: number,
   cy: number,
-  data: StatsData,
+  data: CardData,
   style: { bg: string; text: string; muted: string; ring: string; accent: string; locale: string },
 ): string {
   const body = mix(style.bg, style.text, 0.13)
@@ -160,7 +160,7 @@ interface Track {
  */
 function buildTracks(
   stats: readonly { label: string; formatted: string }[],
-  data: StatsData,
+  data: CardData,
   showLangs: boolean,
 ): Track[] {
   const tracks: Track[] = stats.map((stat, index) => ({

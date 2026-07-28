@@ -238,10 +238,35 @@ describe('cards', () => {
 
     await get('/api?username=shape')
     const callsAfterFirst = github.calls
-    const narrower = await get('/api?username=shape&langs_count=2')
+    // Hiding a module skips its query, so this genuinely fetches something else.
+    const narrower = await get('/api?username=shape&hide=langs')
 
     expect(narrower.headers.get('x-cache')).toBe('MISS')
     expect(github.calls).toBeGreaterThan(callsAfterFirst)
+  })
+
+  /**
+   * The counterpart, and the reason the language parameters left the cache key:
+   * they rank data that has already been fetched, so asking for a different
+   * ranking must not cost the shared GitHub quota anything at all.
+   */
+  it('reranks languages without going back to GitHub', async () => {
+    const github = stubGitHub()
+
+    await get('/api?username=reranked')
+    const callsAfterFirst = github.calls
+
+    for (const variant of [
+      'langs_count=8',
+      'lang_mode=repos',
+      'exclude_langs=typescript',
+      'include_langs=css',
+    ]) {
+      const response = await get(`/api?username=reranked&${variant}`)
+      expect(response.headers.get('x-cache'), variant).toBe('HIT')
+    }
+
+    expect(github.calls).toBe(callsAfterFirst)
   })
 
   it('batches every historical year into a single extra request', async () => {
@@ -440,8 +465,8 @@ describe('POST /purge', () => {
     stubGitHub()
 
     await get('/api?username=variants')
-    await get('/api?username=variants&langs_count=8')
     await get('/api?username=variants&hide=langs')
+    await get('/api?username=variants&tz=Pacific/Auckland')
 
     const response = await purge('username=variants', authorised)
 

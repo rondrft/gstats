@@ -5,8 +5,9 @@
  * `./registry.ts`. This file only wires the implementations to their ids.
  */
 
-import type { StatsData } from '../../github/types'
+import type { CardData, StatsData } from '../../github/types'
 import { resolveLocale } from '../../i18n'
+import { rankLanguages } from '../../languages'
 import type { CardParams } from '../../params'
 import { gauge } from './gauge'
 import { heatmap } from './heatmap'
@@ -34,9 +35,26 @@ export function resolveRenderer(id: string): CardRenderer {
   return CARDS[id as CardId] ?? CARDS[DEFAULT_CARD]
 }
 
-/** Renders the card the parameters asked for. */
+/**
+ * Renders the card the parameters asked for.
+ *
+ * The language ranking happens here rather than before the entry was stored,
+ * which is the whole reason four parameters could leave the cache key. It is the
+ * same move the theme made: the cache holds what was fetched, and everything
+ * that only decides how it reads is applied on the way out.
+ */
 export function renderCard(data: StatsData, params: CardParams): string {
-  return resolveRenderer(params.style.card).render(data, {
+  const view: CardData = {
+    ...data,
+    languages: rankLanguages(data.repos, {
+      mode: params.langMode,
+      limit: params.langsCount,
+      exclude: params.excludeLangs,
+      include: params.includeLangs,
+    }),
+  }
+
+  return resolveRenderer(params.style.card).render(view, {
     params,
     strings: resolveLocale(params.style.locale),
   })

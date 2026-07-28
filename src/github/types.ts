@@ -6,6 +6,7 @@
  * reuses the entry a previous request paid for.
  */
 
+import type { RepoSample } from '../languages'
 import type { Streaks } from '../streak'
 
 export interface LanguageStat {
@@ -47,9 +48,28 @@ export interface StatsData {
   bestYearContributions: number
   streaks: Streaks
   calendar: CompactCalendar
-  languages: LanguageStat[]
+  /**
+   * The repositories, not a finished ranking.
+   *
+   * Ranking is applied when the card is drawn, which is what keeps `lang_mode`,
+   * `langs_count`, `exclude_langs` and `include_langs` out of the cache key —
+   * they change how the same bytes are read, never which bytes are fetched, so
+   * a reader who wants six languages reuses the entry a reader who wanted four
+   * already paid for. `RepoSample` is why that costs kilobytes and not tens of
+   * them.
+   */
+  repos: RepoSample
   /** Epoch milliseconds, so a cached entry can report its own age. */
   fetchedAt: number
+}
+
+/**
+ * What a design is handed: the stored figures plus the language ranking derived
+ * for *this* request's parameters. `renderCard` is the only thing that builds
+ * one, so no design has to know the ranking was not simply stored.
+ */
+export interface CardData extends StatsData {
+  languages: LanguageStat[]
 }
 
 /** Snapshot of GitHub's rate limit headers from the most recent call. */

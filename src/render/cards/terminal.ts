@@ -19,7 +19,7 @@
  * instead of padding it with empty space.
  */
 
-import type { StatsData } from '../../github/types'
+import type { CardData } from '../../github/types'
 import type { Strings } from '../../i18n'
 import type { CardParams, StyleParams } from '../../params'
 import { credit, frame, plate, round, svgDocument } from '../chrome'
@@ -61,7 +61,7 @@ interface RingSpec extends StatModule {
  * a locale or the set of visible modules moves the whole composition together
  * instead of leaving one piece behind at a hard-coded offset.
  */
-function renderTerminal(data: StatsData, { params, strings }: RenderOptions): string {
+function renderTerminal(data: CardData, { params, strings }: RenderOptions): string {
   const { style } = params
   const specs = ringSpecs(data, params, strings)
   const showLangs = !params.hide.has('langs')
@@ -135,7 +135,7 @@ function columnContent(spec: RingSpec): ColumnContent {
  * every design shares — that is what makes `hide` and `locale` behave the same
  * everywhere instead of once per design.
  */
-function ringSpecs(data: StatsData, params: CardParams, strings: Strings): RingSpec[] {
+function ringSpecs(data: CardData, params: CardParams, strings: Strings): RingSpec[] {
   const { current, longest } = data.streaks
   const { style } = params
 

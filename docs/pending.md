@@ -78,20 +78,7 @@ produces it is itself the other line item, at one write in 26; lowering
 `PERSIST_EVERY` in `src/budget.ts` buys accuracy with the resource being
 measured, which is the trade to be suspicious of.
 
-## 5. Move the language parameters out of the cache key
-
-`lang_mode`, `langs_count`, `exclude_langs` and `include_langs` are all in the
-cache key, so switching any of them costs a full refetch — even though the
-*fetched* data is identical and only the post-processing differs.
-
-Storing the raw per-repository data and ranking at render time would make all of
-those free, the way theme changes already are. The cost is a much larger cache
-entry: raw repositories are far bigger than the four-entry ranked list, and that
-weight lands on every profile whether or not anybody uses a non-default setting.
-
-Worth measuring before doing. It may be the wrong trade.
-
-## 6. `WHITELIST` for self-hosting with a private token
+## 4. `WHITELIST` for self-hosting with a private token
 
 [docs/self-hosting.md](self-hosting.md#private-repositories) documents how to run
 an instance with a `repo`-scoped token so your own private repositories count —
@@ -108,20 +95,21 @@ for at all; anything else gets the "user not found" card. Small to build. Listed
 here rather than higher because it only matters for one deployment mode, and that
 mode is currently documented as "do not".
 
-## 7. The `pass` design is cramped, and has an artefact
+## 5. Nothing checks a design against Camo on the way in
 
-Both verified in the source rather than only by eye.
+The five designs after `terminal` shipped verified by opening them in a browser,
+which is not the medium they are served in. Putting them through Camo found two
+things a browser could not have: a heatmap that reached 13.5 KB for a daily
+committer against a 12 KB budget, and the `pass` notch painting a dot on its own
+accent band. Both are fixed. The gap that let them ship is not.
 
-**The perforation notch overlaps the band.** The top notch is a circle at
-`cy = BAND_HEIGHT` with `r = 4`, filled with the card background — so half of it,
-four pixels, is painted over the solid accent band. It reads as a dark dot
-sitting on the band rather than as a hole punched in the edge. It should be
-clipped to the body, or moved down to start below the band.
+What would close it is a check that renders every registered design at its
+largest and compares the bytes against what the origin serves — the size half of
+that now exists in `test/cards.test.ts`, and it is the half that generalises.
+The rest is genuinely hard to automate: Camo passes our bytes through unchanged
+(verified), so what is left is *visual*, and no assertion catches a dot in the
+wrong place.
 
-**The stub is tight on the right.** It is 76 pixels wide with 13 to the tear on
-its left and 20 to the card edge on its right, and it carries the largest number
-on the card plus the barcode. It wants a few more pixels of breathing room, which
-means widening the right margin for this design rather than taking the shared
-default.
-
-Neither is a correctness problem, which is why this is last.
+Worth knowing for whoever adds the seventh design: the useful check is a real
+README, and the useful moment is before it is published rather than after
+somebody opens an issue.

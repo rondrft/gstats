@@ -14,7 +14,7 @@
  * back through the faces that ship with each platform.
  */
 
-import type { StatsData } from '../../github/types'
+import type { CardData } from '../../github/types'
 import { credit, frame, MONO_STACK, plate, round, SERIF_STACK, svgDocument, text } from '../chrome'
 import { abbreviate } from '../langs'
 import { layoutRow } from '../layout'
@@ -45,7 +45,7 @@ const LABEL_TRACKING = 1.4
 
 const labelWidth = (label: string) => textWidth(label, LABEL_SIZE) + label.length * LABEL_TRACKING
 
-function renderPress(data: StatsData, { params, strings }: RenderOptions): string {
+function renderPress(data: CardData, { params, strings }: RenderOptions): string {
   const { style } = params
   const stats = visibleStats(data, params, strings)
   const showLangs = wantsLanguages(params)
@@ -112,11 +112,7 @@ function doubleRule(width: number, stroke: string): string {
   )
 }
 
-function dateline(
-  data: StatsData,
-  width: number,
-  style: { muted: string; locale: string },
-): string {
+function dateline(data: CardData, width: number, style: { muted: string; locale: string }): string {
   const printed = new Date(data.fetchedAt).toISOString().slice(0, 10)
   return (
     text(data.login, {

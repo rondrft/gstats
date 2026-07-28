@@ -244,7 +244,9 @@ describe('languages', () => {
       ],
     })
 
-    const svg = renderCard(data, paramsFixture())
+    // Makefile is excluded by default, and the ranking that applies the default
+    // now runs at render time — so the card has to be asked for it back.
+    const svg = renderCard(data, paramsFixture('username=x&include_langs=makefile'))
 
     expect(svg).toContain('make  █        1%')
   })

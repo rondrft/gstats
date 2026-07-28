@@ -71,14 +71,48 @@ export const DEFAULT_EXCLUDED = [
 
 export type LangMode = 'bytes' | 'repos'
 
-/** One repository, reduced to what the ranking needs. */
+/** One repository as the GitHub layer reports it. */
 export interface RepoLanguages {
-  name: string
   /** ISO timestamp of the last push, used for the recency weight. */
   pushedAt: string | null
   /** Linguist's own choice of primary language, used by `repos` mode. */
   primaryLanguage: string | null
   edges: { name: string; color: string | null; size: number }[]
+}
+
+/**
+ * The repositories as they are *stored*, which is what the ranking now reads.
+ *
+ * The cache holds this rather than a finished ranking, so that `lang_mode`,
+ * `langs_count`, `exclude_langs` and `include_langs` can be answered from an
+ * entry somebody else already paid for instead of each combination costing its
+ * own fetch. That only works if the weight is not paid for in bulk, and the
+ * obvious `RepoLanguages[]` is: at the 300-repository cap it serialises to about
+ * 53 KB, most of it the same language name and the same Linguist colour written
+ * out several thousand times.
+ *
+ * So names and colours are interned into `langs` and everything else refers to
+ * them by index — the same trade `CompactCalendar` makes, for the same reason.
+ * Measured on a real account at the cap: **53 KB to 7 KB**. Field names are
+ * single letters because at three thousand edges they are a third of what is
+ * left.
+ */
+export interface RepoSample {
+  /** Language table. Every index below points into this. */
+  langs: { name: string; color: string | null }[]
+  repos: SampledRepo[]
+}
+
+export interface SampledRepo {
+  /**
+   * Recency weight, resolved when the sample was taken rather than stored as a
+   * push date. It is a three-step bucket over months; an entry lives hours.
+   */
+  w: number
+  /** Index of Linguist's primary language, or -1 when it reports none. */
+  p: number
+  /** `[language index, bytes]`, largest first. */
+  e: [number, number][]
 }
 
 export interface RankOptions {
@@ -89,9 +123,46 @@ export interface RankOptions {
   exclude: readonly string[]
   /** Lowercased names the caller wants re-admitted from the defaults. */
   include: readonly string[]
-  /** Reference time for the recency weight, in epoch milliseconds. */
-  now: number
 }
+
+/**
+ * Compacts what was fetched into what gets stored, resolving the recency weight
+ * against the moment of the fetch.
+ */
+export function sampleRepos(repos: readonly RepoLanguages[], now: number): RepoSample {
+  const langs: { name: string; color: string | null }[] = []
+  const index = new Map<string, number>()
+
+  const intern = (name: string, color: string | null): number => {
+    const seen = index.get(name)
+    if (seen !== undefined) {
+      // The first colour wins, but a later repository may know one where the
+      // first did not — GitHub omits it per edge, not per language.
+      const entry = langs[seen]
+      if (entry !== undefined && entry.color === null) entry.color = color
+      return seen
+    }
+    index.set(name, langs.length)
+    langs.push({ name, color })
+    return langs.length - 1
+  }
+
+  const sampled = repos.map((repo): SampledRepo => {
+    // Edges first, so the primary language is usually already interned with
+    // whatever colour its own edge carried.
+    const e = repo.edges.map((edge): [number, number] => [intern(edge.name, edge.color), edge.size])
+    return {
+      w: recencyWeight(repo.pushedAt, now),
+      p: repo.primaryLanguage === null ? -1 : intern(repo.primaryLanguage, null),
+      e,
+    }
+  })
+
+  return { langs, repos: sampled }
+}
+
+/** An empty sample, for the paths that never asked for languages. */
+export const EMPTY_SAMPLE: RepoSample = { langs: [], repos: [] }
 
 /**
  * Weight for a repository's contribution, by how recently it was pushed to.
@@ -116,30 +187,22 @@ function excludedSet(options: RankOptions): Set<string> {
   return excluded
 }
 
-export function rankLanguages(
-  repos: readonly RepoLanguages[],
-  options: RankOptions,
-): LanguageStat[] {
+export function rankLanguages(sample: RepoSample, options: RankOptions): LanguageStat[] {
   const excluded = excludedSet(options)
-  const colors = new Map<string, string | null>()
-  for (const repo of repos) {
-    for (const edge of repo.edges) {
-      if (!colors.has(edge.name)) colors.set(edge.name, edge.color)
-    }
-  }
+  // Exclusion is decided once per language rather than once per edge: the same
+  // few dozen names are referenced thousands of times.
+  const kept = sample.langs.map((lang) => !excluded.has(lang.name.toLowerCase()))
 
   const totals =
-    options.mode === 'repos'
-      ? countByRepo(repos, excluded, options)
-      : sumBytes(repos, excluded, options)
+    options.mode === 'repos' ? countByRepo(sample.repos, kept) : sumBytes(sample.repos, kept)
 
   const grandTotal = [...totals.values()].reduce((sum, value) => sum + value, 0)
   if (grandTotal === 0) return []
 
   return [...totals.entries()]
-    .map(([name, value]) => ({
-      name,
-      color: colors.get(name) ?? null,
+    .map(([language, value]) => ({
+      name: sample.langs[language]?.name ?? '',
+      color: sample.langs[language]?.color ?? null,
       size: value,
       pct: value / grandTotal,
     }))
@@ -185,31 +248,27 @@ function capValues(values: readonly number[]): number[] {
  * `bytes` mode: recency-weighted byte counts, with no repository allowed to
  * dominate. See `capValues` for why the cap is iterative.
  */
-function sumBytes(
-  repos: readonly RepoLanguages[],
-  excluded: Set<string>,
-  options: RankOptions,
-): Map<string, number> {
+function sumBytes(repos: readonly SampledRepo[], kept: readonly boolean[]): Map<number, number> {
   // Per repository: the languages that survived exclusion, and their total.
   const perRepo = repos.map((repo) => {
-    const kept = repo.edges.filter((edge) => !excluded.has(edge.name.toLowerCase()))
-    const bytes = kept.reduce((sum, edge) => sum + edge.size, 0)
-    return { kept, bytes, weight: recencyWeight(repo.pushedAt, options.now) }
+    const edges = repo.e.filter(([language]) => kept[language] === true)
+    const bytes = edges.reduce((sum, [, size]) => sum + size, 0)
+    return { edges, bytes, weight: repo.w }
   })
 
   const capped = capValues(perRepo.map((repo) => repo.bytes * repo.weight))
   const accountTotal = capped.reduce((sum, value) => sum + value, 0)
   if (accountTotal === 0) return new Map()
 
-  const totals = new Map<string, number>()
+  const totals = new Map<number, number>()
   perRepo.forEach((repo, index) => {
     if (repo.bytes === 0) return
     // The repository's final share of the account, spread across its languages
     // in the proportions it actually holds them.
     const repoShare = (capped[index] ?? 0) / accountTotal
-    for (const edge of repo.kept) {
-      const contribution = repoShare * (edge.size / repo.bytes)
-      totals.set(edge.name, (totals.get(edge.name) ?? 0) + contribution)
+    for (const [language, size] of repo.edges) {
+      const contribution = repoShare * (size / repo.bytes)
+      totals.set(language, (totals.get(language) ?? 0) + contribution)
     }
   })
 
@@ -227,24 +286,19 @@ function sumBytes(
  * bulk is HTML but whose work is TypeScript — the repository falls through to
  * its largest language that survived exclusion rather than being discarded.
  */
-function countByRepo(
-  repos: readonly RepoLanguages[],
-  excluded: Set<string>,
-  options: RankOptions,
-): Map<string, number> {
-  const totals = new Map<string, number>()
+function countByRepo(repos: readonly SampledRepo[], kept: readonly boolean[]): Map<number, number> {
+  const totals = new Map<number, number>()
 
   for (const repo of repos) {
-    const kept = [...repo.edges]
-      .filter((edge) => !excluded.has(edge.name.toLowerCase()))
-      .sort((a, b) => b.size - a.size)
+    const surviving = [...repo.e]
+      .filter(([language]) => kept[language] === true)
+      .sort((a, b) => b[1] - a[1])
 
-    const primaryKept = kept.find((edge) => edge.name === repo.primaryLanguage)
-    const leader = primaryKept ?? kept[0]
+    const primaryKept = surviving.find(([language]) => language === repo.p)
+    const leader = primaryKept ?? surviving[0]
     if (leader === undefined) continue
 
-    const weight = recencyWeight(repo.pushedAt, options.now)
-    totals.set(leader.name, (totals.get(leader.name) ?? 0) + weight)
+    totals.set(leader[0], (totals.get(leader[0]) ?? 0) + repo.w)
   }
 
   return totals

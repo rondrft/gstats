@@ -7,7 +7,7 @@
  * the visible modules and gets them already filtered, translated and formatted.
  */
 
-import type { StatsData } from '../../github/types'
+import type { CardData } from '../../github/types'
 import { formatDayRange, formatNumber, interpolate, type Strings } from '../../i18n'
 import type { CardParams, ModuleName } from '../../params'
 import { abbreviate } from '../langs'
@@ -23,7 +23,7 @@ export interface StatModule {
   detail: string
 }
 
-export function visibleStats(data: StatsData, params: CardParams, strings: Strings): StatModule[] {
+export function visibleStats(data: CardData, params: CardParams, strings: Strings): StatModule[] {
   const { current, longest } = data.streaks
   const { locale } = params.style
   const thisYear = new Date(data.fetchedAt).getUTCFullYear()
@@ -69,14 +69,14 @@ export function wantsLanguages(params: CardParams): boolean {
  * A card is a wall of shapes; this is the only place a profile is described in
  * words, and it is what a screen reader and the image tooltip both read.
  */
-export function describe(data: StatsData, stats: readonly StatModule[]): string {
+export function describe(data: CardData, stats: readonly StatModule[]): string {
   const who = data.name === null ? data.login : `${data.name} (${data.login})`
   const parts = stats.map((stat) => `${stat.formatted} ${stat.label}`)
   return parts.length === 0 ? who : `${who}: ${parts.join(', ')}`
 }
 
 /** `ts 41%` style summary, for designs that show languages on one line. */
-export function languageSummary(data: StatsData, separator = '  '): string {
+export function languageSummary(data: CardData, separator = '  '): string {
   return data.languages
     .map((language) => `${abbreviate(language.name)} ${Math.round(language.pct * 100)}%`)
     .join(separator)
