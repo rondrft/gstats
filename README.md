@@ -13,11 +13,17 @@ GitHub stats cards for your README. Contributions, streaks and languages, render
 ![A phosphor-stats card](docs/assets/terminal.svg)
 
 ```markdown
-![My GitHub stats](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME)
+![My GitHub stats](https://gstats.rondrft.workers.dev/api?username=USERNAME)
 ```
 
 That is the whole thing. Replace `USERNAME`, paste it in — no account to connect,
 no permission to grant, nothing to authorise. Only public data is used.
+
+> **Already using `phosphor-stats.rondrft.workers.dev`?** It still works, and it
+> is not going to stop. The service answers on both hostnames from the same
+> deploy and the same cache — the old one is deprecated in the sense that new
+> snippets use `gstats`, not in the sense that it has an end date. There is
+> nothing to migrate and no reason to edit a README that already works.
 
 If it is useful to you, [a star](https://github.com/rondrft/phosphor-stats)
 helps other people find it.
@@ -29,7 +35,7 @@ helps other people find it.
 Six of them, set with `&card=`. Each is shown below in a different theme, but the
 two are independent: **any design works with any theme**, and with any colour
 override on top. Try combinations at
-**[phosphor-stats.rondrft.workers.dev](https://phosphor-stats.rondrft.workers.dev)**,
+**[gstats.rondrft.workers.dev](https://gstats.rondrft.workers.dev)**,
 which builds the snippet for you.
 
 ### `terminal` — three rings and a language column
@@ -39,7 +45,7 @@ The default, in the phosphor palette the project is named for.
 ![terminal design](docs/assets/terminal.svg)
 
 ```markdown
-![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME)
+![](https://gstats.rondrft.workers.dev/api?username=USERNAME)
 ```
 
 ### `heatmap` — the trailing year, day by day
@@ -50,7 +56,7 @@ against your own distribution, so a quiet year and a busy one both get contrast.
 ![heatmap design](docs/assets/heatmap.svg)
 
 ```markdown
-![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&card=heatmap&theme=ice)
+![](https://gstats.rondrft.workers.dev/api?username=USERNAME&card=heatmap&theme=ice)
 ```
 
 ### `press` — a newspaper front page
@@ -60,7 +66,7 @@ Serif, on paper, with the current streak as the one spot of ink colour.
 ![press design](docs/assets/press.svg)
 
 ```markdown
-![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&card=press&theme=light)
+![](https://gstats.rondrft.workers.dev/api?username=USERNAME&card=press&theme=light)
 ```
 
 ### `gauge` — an instrument panel
@@ -71,7 +77,7 @@ own record, so full deflection means a personal best in progress.
 ![gauge design](docs/assets/gauge.svg)
 
 ```markdown
-![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&card=gauge&theme=mono)
+![](https://gstats.rondrft.workers.dev/api?username=USERNAME&card=gauge&theme=mono)
 ```
 
 ### `vinyl` — a record and its tracklist
@@ -81,7 +87,7 @@ Turns, once every eight seconds. `&animate=false` stops it.
 ![vinyl design](docs/assets/vinyl.svg)
 
 ```markdown
-![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&card=vinyl&theme=amber)
+![](https://gstats.rondrft.workers.dev/api?username=USERNAME&card=vinyl&theme=amber)
 ```
 
 ### `pass` — a boarding pass
@@ -92,7 +98,7 @@ them, so you are not limited to the five presets.
 ![pass design](docs/assets/pass.svg)
 
 ```markdown
-![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&card=pass&bg=F4EDE1&accent=C1432B&text=2B2118&muted=7A6A57&border=D6C6AC)
+![](https://gstats.rondrft.workers.dev/api?username=USERNAME&card=pass&bg=F4EDE1&accent=C1432B&text=2B2118&muted=7A6A57&border=D6C6AC)
 ```
 
 ### Themes
@@ -180,8 +186,8 @@ of eight small Rust services and one enormous inherited Java monolith reads very
 differently under the two.
 
 ```markdown
-![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&lang_mode=repos)
-![](https://phosphor-stats.rondrft.workers.dev/api?username=USERNAME&include_langs=CSS&exclude_langs=Go)
+![](https://gstats.rondrft.workers.dev/api?username=USERNAME&lang_mode=repos)
+![](https://gstats.rondrft.workers.dev/api?username=USERNAME&include_langs=CSS&exclude_langs=Go)
 ```
 
 Bar length is scaled against the leading language, so the leader fills its row.

@@ -1,6 +1,11 @@
-name = "phosphor-stats"
+name = "gstats"
 main = "src/index.ts"
 compatibility_date = "2026-07-01"
+
+# There is a second deploy target at the bottom of this file, named
+# `phosphor-stats`, and it is not a leftover. Read `[env.legacy]` before
+# deleting it: it is the old hostname, and a card URL in a README is a promise
+# that has to keep working whether or not the person who pasted it ever returns.
 
 # `nodejs_compat` is deliberately NOT enabled. The Worker has zero runtime
 # dependencies and uses only Web Platform APIs, which keeps the bundle small
@@ -123,3 +128,68 @@ KV_WRITE_BUDGET = "1000"
 # Secrets, which must never appear here. Set them with:
 #   wrangler secret put GITHUB_TOKEN   # required
 #   wrangler secret put PURGE_TOKEN    # optional, enables POST /purge
+#
+# Secrets are per Worker, not per account, so the legacy target below needs its
+# own copies of the same values:
+#   wrangler secret put GITHUB_TOKEN --env legacy
+#   wrangler secret put PURGE_TOKEN  --env legacy
+
+# ---------------------------------------------------------------------------
+# The old hostname, serving the identical Worker.
+#
+# This service was `phosphor-stats.rondrft.workers.dev` before it was
+# `gstats.rondrft.workers.dev`, and every card URL written against the old name
+# is in somebody's README, on a page they are not watching. Redirecting was the
+# obvious answer and was rejected: it makes every one of those cards depend on
+# Camo following a 301, which is a behaviour of somebody else's proxy that we
+# would be betting a permanent promise on. Deploying the same code twice depends
+# on nothing.
+#
+# `main`, `compatibility_date`, `rules` and `observability` are inherited.
+# Bindings and `vars` are not, so they are repeated below and must be kept in
+# step — that duplication is the running cost of this arrangement, and it is
+# cheaper than the alternative.
+#
+# Deploy both from the same commit:
+#   wrangler deploy               --var SERVICE_VERSION:$(git rev-parse --short HEAD)
+#   wrangler deploy --env legacy  --var SERVICE_VERSION:$(git rev-parse --short HEAD)
+#
+# The identical SERVICE_VERSION is not cosmetic. It is part of the cache key, so
+# it is the thing that makes the two Workers share cache entries rather than
+# each paying its own misses against the same KV write budget. `pnpm deploy`
+# does both, in that order.
+[env.legacy]
+name = "phosphor-stats"
+
+# No cron here. Warming is a property of the service, not of the hostname, and
+# the two share a cache — so a second warmer would refresh entries the first one
+# has already refreshed, at 96 KV writes a day per profile plus 96 more for the
+# status record. That is about a fifth of the free plan's entire allowance spent
+# on doing the same work twice. `triggers` is inherited, so silence has to be
+# stated rather than assumed.
+[env.legacy.triggers]
+crons = []
+
+# The same namespace as the primary, which is the point: a profile warmed or
+# fetched through one hostname is served from cache through the other.
+[[env.legacy.kv_namespaces]]
+binding = "STATS_CACHE"
+id = "073f428dd72448d19a9063f087274b2e"
+preview_id = "57d7366d6d83441abf4cadd1344d2e2c"
+
+# Counters are scoped per Worker script, so this is a second, independent
+# allowance rather than a shared one — see docs/decisions.md.
+[[env.legacy.ratelimits]]
+name = "API_RATE_LIMITER"
+namespace_id = "1"
+
+  [env.legacy.ratelimits.simple]
+  limit = 60
+  period = 60
+
+[env.legacy.vars]
+SERVICE_VERSION = "dev-local"
+CARD_MAX_AGE = "1800"
+API_RATE_LIMIT = "30"
+PROFILE_RATE_LIMIT = "20"
+KV_WRITE_BUDGET = "1000"

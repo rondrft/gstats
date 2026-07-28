@@ -15,7 +15,7 @@ body:
     attributes:
       label: The URL that reproduces it
       description: The full `/api` link, so the exact parameters are visible.
-      placeholder: https://phosphor-stats.rondrft.workers.dev/api?username=octocat&theme=amber
+      placeholder: https://gstats.rondrft.workers.dev/api?username=octocat&theme=amber
     validations:
       required: true
 

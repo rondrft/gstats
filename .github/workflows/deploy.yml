@@ -64,4 +64,18 @@ jobs:
       - uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: deploy --var SERVICE_VERSION:${{ steps.build.outputs.sha }}
+          command: deploy --env="" --var SERVICE_VERSION:${{ steps.build.outputs.sha }}
+
+      # The old hostname, serving the same code so that no published card URL
+      # ever breaks. See [env.legacy] in wrangler.toml for why this is a second
+      # deploy rather than a redirect.
+      #
+      # The same SERVICE_VERSION as the step above, deliberately: it is part of
+      # the cache key, so passing the same value is what lets the two Workers
+      # share entries instead of each paying its own misses out of one KV write
+      # budget. Two steps rather than one `&&` so that a failure names which
+      # hostname it was.
+      - uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy --env legacy --var SERVICE_VERSION:${{ steps.build.outputs.sha }}

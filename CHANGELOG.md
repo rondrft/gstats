@@ -27,6 +27,14 @@ Committed but not yet deployed.
 
 ### Added
 
+- **The service answers on `gstats.rondrft.workers.dev`**, which is the hostname
+  new snippets use. `phosphor-stats.rondrft.workers.dev` keeps working
+  indefinitely: it is a second deploy of the identical Worker from the same
+  commit, sharing one cache, rather than a redirect. **No published card URL
+  needs changing, and none will break.** A redirect was considered and rejected
+  because it would make every existing card depend on Camo following a 301 —
+  somebody else's proxy, undocumented for that purpose. See `[env.legacy]` in
+  `wrangler.toml`.
 - `tz` takes an IANA zone (`&tz=Europe/Madrid`) to count the streak against that
   zone's midnight. Validated against the runtime's own zone list; anything it
   does not recognise falls back to the default rather than erroring. `29d9316`,

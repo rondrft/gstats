@@ -723,6 +723,59 @@ landing page are: a browser fetches the icon alongside the page rather than as a
 separate act of traffic, and throttling it would only break the tab icon of
 somebody who shares an address with a scraper.
 
+### The old hostname is a second deploy of the same Worker, not a redirect
+
+`wrangler.toml`, `[env.legacy]`
+
+**This is the entry to read before deleting anything that looks like a leftover.**
+The service answers on two hostnames: `gstats.rondrft.workers.dev`, and
+`phosphor-stats.rondrft.workers.dev`, which is what it was called first. The
+second one is a full deploy of the identical Worker, from the same commit, bound
+to the same KV namespace.
+
+It exists because of the URL contract. A card URL is pasted into a README once
+and then nobody looks at that page again — that is the whole premise the rest of
+this document is arranged around — so the old hostname has to keep working
+indefinitely, not for a deprecation window.
+
+**A 301 was the obvious answer and is the wrong one.** GitHub serves README
+images through Camo, and a redirect makes every one of those cards depend on
+Camo following it. That is a behaviour of somebody else's proxy: undocumented for
+this purpose, free to change, and not something to stake a permanent promise on.
+Serving the same bytes from both names depends on nothing outside this
+repository. It costs one extra deploy step and some duplicated configuration,
+which is the cheaper side of that trade by a wide margin.
+
+Three consequences follow from the two Workers sharing one KV namespace, and all
+three were checked rather than assumed:
+
+- **The cache is shared, which is the point.** Both deploys must pass the *same*
+  `SERVICE_VERSION`, because it is part of the cache key. Deploy them from one
+  commit or they silently stop sharing entries and each pays its own misses out
+  of a single write budget. `pnpm deploy` and the CI workflow both do this.
+- **The write budget is shared, and correctly so.** `budget:writes:<day>` is
+  deliberately not namespaced by build, and the 1,000-a-day allowance it measures
+  is per *account* — so both Workers counting into one key is the honest total
+  rather than a collision. The flush is a read-then-write with no atomicity, so a
+  second Worker makes it undercount a little more. It was already a floor rather
+  than an audit, and a floor is the useful direction to be wrong in.
+- **The rate limits are per Worker, so they are effectively doubled.** The
+  Rate Limiting binding's counters are scoped to the script, not to the
+  `namespace_id`, and the distinct-login ledger is a module variable — so an
+  address willing to use both hostnames gets both allowances. Both limits are
+  brakes rather than gates, the ceiling that matters is still KV writes, and the
+  deprecated hostname's share of traffic only falls. Worth knowing before
+  quoting the numbers in `limits.md` as exact.
+
+**Secrets are per Worker, not per account.** `GITHUB_TOKEN` and `PURGE_TOKEN`
+have to be set twice, once with `--env legacy`. Forgetting is not subtle: the old
+hostname serves the `GITHUB_TOKEN is not set` card to everybody still using it.
+
+Warming runs on the primary only. The cron is inherited by environments, so
+`[env.legacy.triggers]` sets `crons = []` explicitly — the two share a cache, and
+a second warmer would refresh the same entries at roughly a fifth of the free
+plan's daily writes.
+
 ### The landing page is one self-contained document
 
 `src/landing.ts`

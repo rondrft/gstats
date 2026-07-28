@@ -11,7 +11,9 @@
   "packageManager": "pnpm@11.10.0",
   "scripts": {
     "dev": "wrangler dev --var SERVICE_VERSION:dev-$(git rev-parse --short HEAD)",
-    "deploy": "wrangler deploy --var SERVICE_VERSION:$(git rev-parse --short HEAD)",
+    "deploy": "pnpm deploy:primary && pnpm deploy:legacy",
+    "deploy:primary": "wrangler deploy --env=\"\" --var SERVICE_VERSION:$(git rev-parse --short HEAD)",
+    "deploy:legacy": "wrangler deploy --env legacy --var SERVICE_VERSION:$(git rev-parse --short HEAD)",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "format": "biome check --write .",

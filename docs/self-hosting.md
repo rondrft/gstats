@@ -111,15 +111,27 @@ allows a thousand a day.
 ## 6. Deploy
 
 ```bash
-pnpm deploy
+pnpm deploy:primary
 ```
 
+`pnpm deploy:primary`, not `pnpm deploy`. The plain one deploys **two** Workers:
+`gstats`, and a second target named `phosphor-stats` that exists only because the
+public instance was called that first and its card URLs are in other people's
+READMEs. On your account that is a duplicate you have no use for, paying its own
+cold starts and sharing your KV write budget for nothing.
+
+Either use `deploy:primary`, or delete the `[env.legacy]` block from
+`wrangler.toml` and rename the Worker at the top of the file to whatever you want
+your hostname to be. Deleting it is the tidier option for a fork; the reasoning
+that keeps it in this repository is in
+[decisions.md](decisions.md#the-old-hostname-is-a-second-deploy-of-the-same-worker-not-a-redirect).
+
 Wrangler prints the URL, something like
-`https://phosphor-stats.<your-subdomain>.workers.dev`. Check it:
+`https://gstats.<your-subdomain>.workers.dev`. Check it:
 
 ```bash
-curl -s https://phosphor-stats.<your-subdomain>.workers.dev/health
-curl -sI "https://phosphor-stats.<your-subdomain>.workers.dev/api?username=YOUR_LOGIN" | grep -i x-cache
+curl -s https://gstats.<your-subdomain>.workers.dev/health
+curl -sI "https://gstats.<your-subdomain>.workers.dev/api?username=YOUR_LOGIN" | grep -i x-cache
 ```
 
 The first request reports `X-Cache: MISS`, the second `HIT`.
