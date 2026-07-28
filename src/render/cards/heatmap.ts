@@ -144,8 +144,20 @@ function levelsFor(calendar: CompactCalendar): number[] {
 /**
  * The grid: an empty plate under the days that had activity.
  *
- * The first column is padded so that rows correspond to weekdays — the calendar
- * starts on whatever day it starts on, and a grid whose rows drift is unreadable.
+ * The calendar is exactly `WEEKS * DAYS` days long, so a day's position is its
+ * index and nothing else: column `index / 7`, row `index % 7`.
+ *
+ * **Rows are not weekdays.** The stored calendar ends on the reference day, and
+ * that day is a different weekday tomorrow, so which weekday each row holds
+ * shifts by one every day. There used to be a `weekdayOfFirst` offset here
+ * described as padding the first column to fix exactly that; it computed
+ * `(53 * 7 - 371) % 7`, which is zero, and always was — the span it subtracted
+ * from is the same constant it is. Nothing was padded. The comment was the only
+ * part doing any work, and it was describing behaviour the code did not have.
+ *
+ * Anchoring the rows for real would move every cell on a published design, which
+ * the registry contract does not allow. It would have to be a new id, and the
+ * card carries no weekday labels for the drift to disagree with.
  */
 function grid(
   levels: readonly number[],
@@ -154,17 +166,15 @@ function grid(
   ramp: readonly string[],
   animate: boolean,
 ): string {
-  const offset = weekdayOfFirst(levels.length)
   const byLevel: string[][] = [[], [], [], [], []]
 
   levels.forEach((level, index) => {
     if (level <= 0) return
-    const slot = index + offset
-    const column = Math.floor(slot / DAYS)
+    const column = Math.floor(index / DAYS)
     if (column >= WEEKS) return
     // The row is chosen by which symbol is referenced; only the column is
     // written out. See ROW_IDS for why that is worth the seven definitions.
-    byLevel[level]?.push(`<use href="#${ROW_IDS[slot % DAYS]}" x="${column * PITCH}"/>`)
+    byLevel[level]?.push(`<use href="#${ROW_IDS[index % DAYS]}" x="${column * PITCH}"/>`)
   })
 
   const cells = byLevel
@@ -209,16 +219,6 @@ function wipeRules(): string {
   )
 }
 
-/**
- * Days to pad before the first cell so each row is one weekday.
- *
- * The calendar always ends on the reference day, so the first day's weekday is
- * derived from the span rather than stored.
- */
-function weekdayOfFirst(span: number): number {
-  return (WEEKS * DAYS - span) % DAYS
-}
-
 function header(
   stats: readonly { formatted: string; label: string }[],
   x: number,
@@ -252,14 +252,14 @@ function header(
  * anchors a position in the grid to a time of year.
  */
 function monthLabels(calendar: CompactCalendar, x: number, y: number, fill: string): string {
-  const offset = weekdayOfFirst(calendar.counts.length)
   const labels: string[] = []
   let previous = ''
   let lastLabelled = Number.NEGATIVE_INFINITY
 
   for (let column = 0; column < WEEKS; column += 1) {
-    const dayIndex = column * DAYS - offset
-    if (dayIndex < 0 || dayIndex >= calendar.counts.length) continue
+    // The same mapping the grid uses, so a label always sits over its own column.
+    const dayIndex = column * DAYS
+    if (dayIndex >= calendar.counts.length) continue
     const month = addDays(calendar.from, dayIndex).slice(5, 7)
     if (month === previous) continue
     previous = month

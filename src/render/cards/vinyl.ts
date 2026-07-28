@@ -19,7 +19,7 @@ import { mix } from '../color'
 import { abbreviate } from '../langs'
 import { layoutRow } from '../layout'
 import { textWidth } from '../metrics'
-import { describe, visibleStats, wantsLanguages } from './modules'
+import { describe, visibleStats } from './modules'
 import type { CardRenderer, RenderOptions } from './registry'
 
 const DISC_RADIUS = 52
@@ -43,7 +43,7 @@ const SPIN_SECONDS = 8
 function renderVinyl(data: CardData, { params, strings }: RenderOptions): string {
   const { style } = params
   const stats = visibleStats(data, params, strings)
-  const showLangs = wantsLanguages(params)
+  const showLangs = !params.hide.has('langs')
 
   const tracks = buildTracks(stats, data, showLangs)
   const trackWidth = Math.max(

@@ -119,9 +119,11 @@ Details worth knowing:
   profile, that profile's existing entry is left alone and the run moves on. A
   figure from some hours ago beats a miss.
 - **Only the default parameters are warmed.** A profile has one cache entry per
-  combination of the inputs that change what is fetched, so a card using
-  `langs_count=8` or `lang_mode=repos` is not covered and its first reader still
-  pays for a miss. That is the ordinary behaviour, not a fault.
+  combination of the inputs that change what is *stored* — `hide` and `tz` — so a
+  card using either is not covered and its first reader still pays for a miss.
+  That is the ordinary behaviour, not a fault. The language parameters used to be
+  on that list and are not any more: `langs_count=8` and `lang_mode=repos` rank
+  the warmed entry rather than needing one of their own.
 
 `/health` reports what is configured and how the last run went, which is the only
 way to notice a cron that has quietly stopped:

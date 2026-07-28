@@ -68,7 +68,7 @@ export const KV_FRESH_SECONDS = 6 * 60 * 60
  * the window in which a rate-limited request can still answer with a stale card
  * rather than an error.
  */
-export const KV_EXPIRE_SECONDS = 7 * 24 * 60 * 60
+const KV_EXPIRE_SECONDS = 7 * 24 * 60 * 60
 
 export interface CacheEntry {
   data: StatsData

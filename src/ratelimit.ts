@@ -147,11 +147,6 @@ export function forgetTrackedClients(): void {
   ledger.clear()
 }
 
-/** How many addresses the ledger is currently holding. Reported by `/health`. */
-export function trackedClientCount(): number {
-  return ledger.size
-}
-
 export async function checkRateLimits(check: RateLimitCheck): Promise<RateLimitDecision> {
   // Without an address there is nothing to attribute a limit to. This is the
   // local case — `wrangler dev` and the test suite — rather than anything a

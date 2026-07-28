@@ -36,7 +36,7 @@
 export const DEFAULT_DAILY_WRITE_BUDGET = 1_000
 
 /** Fraction of the allowance above which `/health` stops saying `ok`. */
-export const WARNING_FRACTION = 0.8
+const WARNING_FRACTION = 0.8
 
 /**
  * Writes an isolate accumulates before it flushes.

@@ -36,10 +36,10 @@ const COLOR_KEYWORDS = new Set(['none', 'transparent'])
 const MODULES = ['total', 'streak', 'best', 'langs'] as const
 export type ModuleName = (typeof MODULES)[number]
 
-export const LANG_STYLES = ['blocks', 'bars'] as const
+const LANG_STYLES = ['blocks', 'bars'] as const
 export type LangStyle = (typeof LANG_STYLES)[number]
 
-export const LANG_MODES = ['bytes', 'repos'] as const
+const LANG_MODES = ['bytes', 'repos'] as const
 
 export const DEFAULTS = {
   radius: 6,
@@ -66,20 +66,24 @@ export const LIMITS = {
   maxAge: { min: 1800, max: 86400 },
 } as const
 
-/** Inputs that change which bytes we ask GitHub for, or how they are ranked. */
+/**
+ * Inputs that change what ends up in the cache entry.
+ *
+ * This is exactly what `cacheKey` is given, and the reason it is a type of its
+ * own rather than a comment on a wider one: a parameter that does not belong in
+ * the key is not merely undocumented here, it is unreachable from the function
+ * that builds it. The four language parameters used to be members and were
+ * moved out when the ranking moved to render time.
+ */
 export interface DataParams {
   username: string
-  langsCount: number
-  excludeLangs: string[]
-  /** Languages to re-admit from the default exclusion list. */
-  includeLangs: string[]
-  langMode: LangMode
+  /** Hiding a module skips its query, so it changes what is fetched. */
   hide: Set<ModuleName>
   /**
    * IANA zone the streak's day boundary is drawn in, canonically spelled, or
-   * null for the Anywhere on Earth default. Unlike the rest of this interface it
-   * does not change *what* is fetched — but the streak it produces is computed
-   * before the entry is stored, so it belongs to the cache key all the same.
+   * null for the Anywhere on Earth default. The odd one out: it does not change
+   * what is fetched, but the streak it produces is computed before the entry is
+   * stored, so it belongs to the key all the same.
    */
   tz: string | null
 }
@@ -106,6 +110,16 @@ export interface StyleParams {
 
 export interface CardParams extends DataParams {
   style: StyleParams
+  /**
+   * How the stored repositories are ranked into a language list, applied when
+   * the card is drawn. Out of the cache key by construction — `DataParams` is
+   * what builds it, and these are not members of it.
+   */
+  langsCount: number
+  excludeLangs: string[]
+  /** Languages to re-admit from the default exclusion list. */
+  includeLangs: string[]
+  langMode: LangMode
   /**
    * Per-card override of the response's `max-age`, or null to take the
    * instance default. Kept out of the cache key: it changes what a client is

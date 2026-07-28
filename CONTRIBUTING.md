@@ -39,11 +39,12 @@ src/
   stats.ts          cache -> GitHub -> stale fallback
   purge.ts          POST /purge: auth, rate limit, targeted invalidation
   warm.ts           the cron trigger: scheduled refresh of WARM_USERS
-  streak.ts         streak arithmetic, pure and I/O free
+  streak.ts         streak arithmetic and which day counts as today
   cache.ts          KV wrapper and cache key derivation
   i18n.ts           card copy and locale-aware formatting
   landing.ts        the self-contained landing page, head tags included
-  languages.ts      language ranking: cap, recency weight, exclusions
+  languages.ts      what is stored per repository, and the ranking the
+                    renderer derives from it: cap, recency, exclusions
   github/
     client.ts       GraphQL transport, rate limit accounting, TokenProvider
     contributions.ts
@@ -99,8 +100,15 @@ needs a test that fails before the change.
 **The cache stores data, not SVG.** KV holds serialised `StatsData`; the card is
 built from it on every request. Style parameters are therefore absent from the
 cache key, and a request in a different theme reuses the entry an earlier request
-paid for. A new parameter belongs in the key only if it changes what is fetched
-from GitHub.
+paid for. The same goes for the language parameters: the entry holds the
+repositories and the ranking runs at render time.
+
+A new parameter belongs in the key only if it changes what ends up *stored*, and
+that rule is enforced rather than remembered — `cacheKey` takes `DataParams`,
+which has three members, so anything else is not merely undocumented but
+unreachable from it. Adding a parameter to `CardParams` costs nothing; adding one
+to `DataParams` multiplies the entries every profile needs, and the arithmetic
+for that is in [docs/limits.md](docs/limits.md).
 
 One consequence is worth knowing before you go looking for a bug: a release that
 changes the renderer takes effect on the next request, because nothing rendered

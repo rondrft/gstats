@@ -27,7 +27,7 @@ import { mix } from '../color'
 import { abbreviate, barFraction } from '../langs'
 import { layoutRow } from '../layout'
 import { textWidth } from '../metrics'
-import { describe, visibleStats, wantsLanguages } from './modules'
+import { describe, visibleStats } from './modules'
 import type { CardRenderer, RenderOptions } from './registry'
 
 const RADIUS = 26
@@ -60,7 +60,7 @@ const BAR_HEIGHT = 5
 function renderGauge(data: CardData, { params, strings }: RenderOptions): string {
   const { style } = params
   const stats = visibleStats(data, params, strings)
-  const showLangs = wantsLanguages(params)
+  const showLangs = !params.hide.has('langs')
 
   const dials = stats.map((stat) => ({
     width: Math.max(

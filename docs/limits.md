@@ -222,3 +222,16 @@ adds a pagination round trip, up to the three-page cap.
 plan are 100,000 a day, which at 30-minute `max-age` is a great many readers.
 That is the other reason `max-age` is a separate lever from KV freshness: it
 spends the plentiful resource, not the scarce one.
+
+A hit does now rank the stored repositories as well as draw the card, which is
+the price of `lang_mode` and friends no longer costing a fetch each. It is CPU on
+an invocation already being paid for — at the 300-repository cap, an entry of
+about 11 KB to parse and a few thousand numbers to add up — against the 10 ms a
+free-plan request is allowed. The resource it saves is the one that runs out.
+
+**How the card is configured no longer multiplies the entries.** A profile used
+to need one entry per combination of `langs_count`, `lang_mode`, `exclude_langs`
+and `include_langs` anybody had written into a URL, each with its own four writes
+a day. The table above assumed the default and was optimistic by however many
+variants were in circulation. It is now correct as written: `hide` and `tz` are
+the only parameters that still split a profile in two.

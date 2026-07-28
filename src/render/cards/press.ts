@@ -19,7 +19,7 @@ import { credit, frame, MONO_STACK, plate, round, SERIF_STACK, svgDocument, text
 import { abbreviate } from '../langs'
 import { layoutRow } from '../layout'
 import { textWidth } from '../metrics'
-import { describe, visibleStats, wantsLanguages } from './modules'
+import { describe, visibleStats } from './modules'
 import type { CardRenderer, RenderOptions } from './registry'
 
 const MARGIN = 22
@@ -48,7 +48,7 @@ const labelWidth = (label: string) => textWidth(label, LABEL_SIZE) + label.lengt
 function renderPress(data: CardData, { params, strings }: RenderOptions): string {
   const { style } = params
   const stats = visibleStats(data, params, strings)
-  const showLangs = wantsLanguages(params)
+  const showLangs = !params.hide.has('langs')
 
   const columns = stats.map((stat) => ({
     // The label is set in caps with tracking, so it is wider than the raw

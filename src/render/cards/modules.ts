@@ -58,11 +58,6 @@ export function visibleStats(data: CardData, params: CardParams, strings: String
   return all.filter((stat) => !params.hide.has(stat.module))
 }
 
-/** Whether the language block was asked for. Its emptiness is a separate matter. */
-export function wantsLanguages(params: CardParams): boolean {
-  return !params.hide.has('langs')
-}
-
 /**
  * Text alternative for the whole card.
  *

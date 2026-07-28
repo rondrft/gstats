@@ -37,14 +37,13 @@ const CALENDAR_SPAN = 53 * 7
  * Days the API did not report become zeros rather than gaps, so the array is
  * dense and the renderer can index it by offset without searching.
  */
-export function compactCalendar(
-  days: readonly ContributionDay[],
-  today: string,
-  span = CALENDAR_SPAN,
-): CompactCalendar {
+export function compactCalendar(days: readonly ContributionDay[], today: string): CompactCalendar {
   const byDate = new Map(days.map((day) => [day.date, day.count]))
-  const from = addDays(today, -(span - 1))
-  const counts = Array.from({ length: span }, (_, index) => byDate.get(addDays(from, index)) ?? 0)
+  const from = addDays(today, -(CALENDAR_SPAN - 1))
+  const counts = Array.from(
+    { length: CALENDAR_SPAN },
+    (_, index) => byDate.get(addDays(from, index)) ?? 0,
+  )
   return { from, counts }
 }
 
