@@ -17,8 +17,8 @@ Everything below fits in the Cloudflare Workers free tier.
 ## 1. Clone and install
 
 ```bash
-git clone https://github.com/rondrft/phosphor-stats
-cd phosphor-stats
+git clone https://github.com/rondrft/gstats
+cd gstats
 pnpm install
 ```
 
@@ -139,7 +139,7 @@ The first request reports `X-Cache: MISS`, the second `HIT`.
 Then point your README at your own host:
 
 ```markdown
-![My GitHub stats](https://phosphor-stats.<your-subdomain>.workers.dev/api?username=YOUR_LOGIN)
+![My GitHub stats](https://gstats.<your-subdomain>.workers.dev/api?username=YOUR_LOGIN)
 ```
 
 ## Private repositories

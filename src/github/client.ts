@@ -14,7 +14,7 @@ const ENDPOINT = 'https://api.github.com/graphql'
  * GitHub rejects unidentified clients. Pointing the agent at the repository
  * means anyone investigating unusual traffic can find out what is generating it.
  */
-const USER_AGENT = 'phosphor-stats (+https://github.com/rondrft/phosphor-stats)'
+const USER_AGENT = 'phosphor-stats (+https://github.com/rondrft/gstats)'
 
 /**
  * A README embeds this card in an `<img>`; a request that hangs shows a broken

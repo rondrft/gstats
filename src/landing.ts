@@ -17,7 +17,7 @@
 import { CARD_IDS, DEFAULT_CARD } from './render/cards/registry'
 import { THEME_NAMES, THEMES } from './render/themes'
 
-const REPO_URL = 'https://github.com/rondrft/phosphor-stats'
+const REPO_URL = 'https://github.com/rondrft/gstats'
 
 /**
  * One title and one description, used by the `<title>`, the meta description
@@ -278,7 +278,7 @@ export function landingPage(origin: string): string {
       <img class="mark" src="/logo.svg" width="32" height="32" alt="" aria-hidden="true">
       <h1>phosphor-stats</h1>
       <div class="badges">
-        <a href="${REPO_URL}"><img src="https://img.shields.io/github/stars/rondrft/phosphor-stats?style=flat-square&labelColor=080D08&color=EF9F27" alt="GitHub stars"></a>
+        <a href="${REPO_URL}"><img src="https://img.shields.io/github/stars/rondrft/gstats?style=flat-square&labelColor=080D08&color=EF9F27" alt="GitHub stars"></a>
         <a href="${REPO_URL}/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-1D9E75?style=flat-square&labelColor=080D08" alt="MIT license"></a>
       </div>
     </div>

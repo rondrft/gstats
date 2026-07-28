@@ -1,8 +1,8 @@
 blank_issues_enabled: true
 contact_links:
   - name: Self-hosting help
-    url: https://github.com/rondrft/phosphor-stats/blob/main/docs/self-hosting.md
+    url: https://github.com/rondrft/gstats/blob/main/docs/self-hosting.md
     about: Deploy, token, KV and rate limit questions are answered here first.
   - name: Questions and ideas
-    url: https://github.com/rondrft/phosphor-stats/discussions
+    url: https://github.com/rondrft/gstats/discussions
     about: For anything that is not a bug report or a concrete proposal.

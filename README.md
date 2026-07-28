@@ -6,9 +6,9 @@
 
 GitHub stats cards for your README. Contributions, streaks and languages, rendered as SVG on the edge.
 
-[![CI](https://github.com/rondrft/phosphor-stats/actions/workflows/ci.yml/badge.svg)](https://github.com/rondrft/phosphor-stats/actions/workflows/ci.yml)
+[![CI](https://github.com/rondrft/gstats/actions/workflows/ci.yml/badge.svg)](https://github.com/rondrft/gstats/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-1D9E75?style=flat-square&labelColor=080D08)](LICENSE)
-[![Stars](https://img.shields.io/github/stars/rondrft/phosphor-stats?style=flat-square&labelColor=080D08&color=EF9F27)](https://github.com/rondrft/phosphor-stats/stargazers)
+[![Stars](https://img.shields.io/github/stars/rondrft/gstats?style=flat-square&labelColor=080D08&color=EF9F27)](https://github.com/rondrft/gstats/stargazers)
 
 ![A phosphor-stats card](docs/assets/terminal.svg)
 
@@ -25,7 +25,7 @@ no permission to grant, nothing to authorise. Only public data is used.
 > snippets use `gstats`, not in the sense that it has an end date. There is
 > nothing to migrate and no reason to edit a README that already works.
 
-If it is useful to you, [a star](https://github.com/rondrft/phosphor-stats)
+If it is useful to you, [a star](https://github.com/rondrft/gstats)
 helps other people find it.
 
 ---
@@ -252,7 +252,7 @@ know it exists.
 About five minutes, and it fits inside the Cloudflare free tier.
 
 ```bash
-git clone https://github.com/rondrft/phosphor-stats
+git clone https://github.com/rondrft/gstats
 cd phosphor-stats && pnpm install
 pnpm wrangler kv namespace create STATS_CACHE   # paste the id into wrangler.toml
 pnpm wrangler secret put GITHUB_TOKEN
