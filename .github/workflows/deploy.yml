@@ -61,7 +61,7 @@ jobs:
       # The commit becomes the build identifier: it labels the instance at
       # /health and namespaces the cache, so the release does not read entries
       # written by its predecessor.
-      - uses: cloudflare/wrangler-action@v3
+      - uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           command: deploy --env="" --var SERVICE_VERSION:${{ steps.build.outputs.sha }}
@@ -75,7 +75,7 @@ jobs:
       # share entries instead of each paying its own misses out of one KV write
       # budget. Two steps rather than one `&&` so that a failure names which
       # hostname it was.
-      - uses: cloudflare/wrangler-action@v3
+      - uses: cloudflare/wrangler-action@v4
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           command: deploy --env legacy --var SERVICE_VERSION:${{ steps.build.outputs.sha }}
