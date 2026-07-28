@@ -469,17 +469,61 @@ A year of `{date, count}` objects is roughly fifteen times the JSON of a start
 date plus an array of counts — and it sits in the cache entry of every profile
 whether or not the reader asked for a design that draws it.
 
-### Streaks are computed in UTC, and today's zero does not break one
+### The streak's day boundary is Anywhere on Earth, not UTC
 
-`src/streak.ts`
+`src/streak.ts`, `src/stats.ts`
 
 A Worker runs in whichever colo is closest to the reader, so anything derived
-from local time would report a different streak per continent. The module reads
-no clock at all: the reference day is an argument.
+from the machine's own local time would report a different streak per continent.
+The module reads no clock at all: the reference day is an argument. That much was
+always right. Which day to pass it was not.
 
-A zero on today does not end a streak. The day is still in progress, and
-collapsing somebody's streak at 00:01 UTC because they have not pushed yet is
-simply wrong. A zero on the day before is a genuine break.
+It used to be the UTC day, which is the worst available answer for roughly half
+the planet. For anybody west of Greenwich, a commit late on their Monday evening
+is already Tuesday in UTC — so through the last hours of their day the card is
+counting a day they have not finished, and reports a streak one short. It was
+documented as a limitation for months on the grounds that a boundary has to be
+drawn somewhere. True, and it was drawn in the one place that is wrong for a
+continent's worth of readers rather than for nobody.
+
+The default is now **Anywhere on Earth** — the date in UTC−12, the last zone on
+the planet to leave any given day. A day counts as long as it is still that day
+somewhere, so no reader's streak is ever cut before their own day is over. The
+cost is the opposite error: a new day takes up to twelve further hours to be
+picked up. That is much the more benign of the two. One shows a figure briefly
+stale; the other shows a figure that is wrong, and wrong in the discouraging
+direction, to somebody who did the work.
+
+`tz` takes an IANA zone for anybody who wants theirs exactly. It is validated
+against `Intl.supportedValuesOf('timeZone')` — the runtime's own list rather than
+a table here that would rot as IANA moves — matched case-insensitively, and
+anything unrecognised is silently the default. It is in the cache key, because
+the streak is computed before the entry is stored; almost every reader takes the
+default and shares one entry.
+
+**The arithmetic special-cases none of this.** It anchors on the most recent day
+that had activity and measures the gap from there to the reference day. One rule
+then covers every zone, including the ones where the gap is *negative*: a reader
+in UTC+14 can commit on a date Anywhere on Earth has not reached yet. Starting
+from "today" and walking backwards, which is the obvious implementation, cannot
+see that day at all.
+
+A zero on the reference day does not end a streak — one day of silence is
+allowed, because the day is still in progress. Two is a genuine break.
+
+### The fetch window and the reference day are different days
+
+`src/stats.ts`
+
+Conflating them costs real contributions, in the direction the change above
+exists to avoid. Anywhere on Earth is up to twelve hours behind UTC, so asking
+GitHub for contributions "up to AoE today" would discard everything done since
+midnight UTC — and the streak would come out *worse* than the UTC version it
+replaced.
+
+So the upstream window always runs to the end of the UTC day, and the reference
+day is only what the answer is then interpreted against. The calendar covers both
+because it is fetched to the wider of the two.
 
 ---
 

@@ -132,6 +132,7 @@ new look ships under a new id.
 | `scanlines` | bool | `true` | CRT banding over the background. |
 | `animate` | bool | `true` | Draw-on animation. |
 | `locale` | string | `en` | Label language: `en` or `es`. |
+| `tz` | IANA zone | Anywhere on Earth | Which midnight ends a day for the streak, e.g. `Europe/Madrid`. |
 | `show_credit` | bool | `false` | Adds a small project credit to the card. |
 | `cache_seconds` | 1800–86400 | instance default | How long a client may reuse the card. |
 
@@ -200,10 +201,12 @@ fixable.
   About half an hour is achievable for an embedded card; "instant" is not, for
   anybody. Opening the `/api` URL directly bypasses Camo and shows the current
   figures.
-- **Streaks are computed in UTC.** A day boundary has to be drawn somewhere, and
-  a Worker runs in whichever data centre is closest to the reader — anything
-  derived from local time would give a different answer per continent. If you
-  live far from UTC your streak may tick over at an unfamiliar hour.
+- **A new day can take a few hours to show up.** Streaks are counted against
+  **Anywhere on Earth** (UTC−12), the last zone on the planet to change date, so
+  a day counts for as long as it is still that day somewhere. That is the safe
+  direction: your streak is never cut short before your own day is over, at the
+  price of a new one taking up to twelve hours to be picked up. Pass
+  `&tz=Europe/Madrid` — any IANA zone — to have it counted in yours exactly.
 - **A zero on today does not break your streak.** The day is not over yet. The
   streak only ends once yesterday is also empty.
 - **Public repositories only**, and forks are excluded from the language totals

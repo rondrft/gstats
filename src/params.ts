@@ -75,6 +75,13 @@ export interface DataParams {
   includeLangs: string[]
   langMode: LangMode
   hide: Set<ModuleName>
+  /**
+   * IANA zone the streak's day boundary is drawn in, canonically spelled, or
+   * null for the Anywhere on Earth default. Unlike the rest of this interface it
+   * does not change *what* is fetched — but the streak it produces is computed
+   * before the entry is stored, so it belongs to the cache key all the same.
+   */
+  tz: string | null
 }
 
 /** Inputs that only change how the fetched data is painted. */
@@ -165,6 +172,44 @@ function oneOf<T extends string>(raw: string | null, allowed: readonly T[], fall
   return (allowed as readonly string[]).includes(value ?? '') ? (value as T) : fallback
 }
 
+/**
+ * Lowercased IANA zone name to its canonical spelling.
+ *
+ * Built from the runtime's own list rather than a table shipped here, which
+ * would start rotting the moment the IANA database moved. Built once, and only
+ * if somebody actually passes `tz` — it is several hundred entries and the
+ * overwhelming majority of requests take the default.
+ */
+let timeZones: Map<string, string> | null = null
+
+function knownTimeZones(): Map<string, string> {
+  if (timeZones === null) {
+    timeZones = new Map()
+    try {
+      for (const zone of Intl.supportedValuesOf('timeZone')) {
+        timeZones.set(zone.toLowerCase(), zone)
+      }
+    } catch {
+      // A runtime without the enumeration API leaves the map empty, so every
+      // `tz` falls back to the default. Degraded, not broken.
+    }
+  }
+  return timeZones
+}
+
+/**
+ * A canonical IANA zone, or null for the Anywhere on Earth default.
+ *
+ * Matched case-insensitively — `america/new_york` is what people type — and a
+ * name the runtime does not know is silently the default. A misspelt zone must
+ * never be an error: the reader cannot see one, and a streak drawn a few hours
+ * differently is not worth a broken image.
+ */
+function parseTimeZone(raw: string | null): string | null {
+  if (raw === null) return null
+  return knownTimeZones().get(raw.trim().toLowerCase()) ?? null
+}
+
 function parseHidden(raw: string | null): Set<ModuleName> {
   const known = new Set<string>(MODULES)
   const hidden = parseCsv(raw)
@@ -225,6 +270,7 @@ export function parseParams(query: URLSearchParams): ParseResult {
       includeLangs: parseCsv(query.get('include_langs')).map((lang) => lang.toLowerCase()),
       langMode: oneOf(query.get('lang_mode'), LANG_MODES, DEFAULTS.langMode),
       hide: parseHidden(query.get('hide')),
+      tz: parseTimeZone(query.get('tz')),
       style,
       maxAgeOverride: optionalInt(query.get('cache_seconds'), LIMITS.maxAge),
     },

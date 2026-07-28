@@ -1,15 +1,37 @@
 /**
  * Streak arithmetic.
  *
- * Pure, I/O free and timezone free by construction: every date is an ISO
- * `YYYY-MM-DD` string interpreted as UTC, and "today" is an argument rather than
- * something read from the clock. That matters twice over — a Worker runs in
- * whichever colo is closest to the reader, so anything derived from local time
- * would give a different answer per continent, and the whole module stays
- * trivially testable.
+ * Pure and I/O free: every date is an ISO `YYYY-MM-DD` string, and the reference
+ * day is an argument rather than something read from the clock. A Worker runs in
+ * whichever colo is closest to the reader, so anything derived from the machine's
+ * own local time would give a different answer per continent.
  *
  * Dates are compared as calendar days, never as instants, so daylight saving and
  * leap years are handled by the calendar rather than by day-length arithmetic.
+ *
+ * ## Which day is "today"
+ *
+ * A streak needs a day boundary and there is no boundary every reader agrees on.
+ * This used to draw it at UTC midnight, which is the worst option for roughly
+ * half the planet: for anybody west of Greenwich, a commit late on their Monday
+ * evening is already Tuesday in UTC, so through the last hours of their day the
+ * card counts a day they have not finished and reports a streak one short.
+ *
+ * The default is now **Anywhere on Earth** — the date in UTC−12, the last zone
+ * to leave any given day. A day counts as long as it is still that day
+ * *somewhere*, so no reader ever sees their streak cut before their own day is
+ * over. The cost is the opposite error: a new day takes up to a further twelve
+ * hours to be picked up. That is much the more benign of the two, because it
+ * errs towards a figure that is briefly stale rather than towards one that is
+ * wrong and discouraging.
+ *
+ * `tz` overrides it for anybody who wants their own zone exactly.
+ *
+ * The arithmetic below never special-cases any of this. It anchors on the most
+ * recent day that had activity and measures the gap from there to the reference
+ * day, which is what lets one rule cover a reader in UTC−11 and a reader in
+ * UTC+14 — whose "today" can be a day *ahead* of Anywhere on Earth, making that
+ * gap negative.
  */
 
 export interface ContributionDay {
@@ -74,23 +96,39 @@ export function computeStreaks(days: readonly ContributionDay[], today: string):
 }
 
 /**
- * Walks backwards from `today` for as long as days have contributions.
+ * Days the most recent activity may lag the reference day and still count.
  *
- * A zero on `today` does not end the streak: the day is still in progress, and
- * showing a streak collapse at 00:01 UTC for someone who simply has not pushed
- * yet is both wrong and demoralising. The walk restarts one day earlier instead.
- * A zero on the day before that is a genuine break.
+ * One, because the reference day is still in progress: collapsing somebody's
+ * streak the moment their day ticks over, when they simply have not pushed yet,
+ * is both wrong and demoralising. Two days of silence is a genuine break.
+ */
+const GRACE_DAYS = 1
+
+/**
+ * The run of consecutive active days ending at the account's most recent one.
+ *
+ * Anchoring on the last day with activity rather than on `today` is what makes
+ * this work for every reader without a case for each. The gap between the two is
+ * then the only question, and it is allowed to be *negative*: a reader in UTC+14
+ * can commit on a date that Anywhere on Earth has not reached, and their streak
+ * is obviously alive. Anything more than `GRACE_DAYS` behind is broken.
  */
 function currentStreak(counts: Map<string, number>, today: string): StreakRange {
   if (Number.isNaN(toTimestamp(today))) return EMPTY_RANGE
 
-  let cursor = (counts.get(today) ?? 0) > 0 ? today : shiftDays(today, -1)
-
-  const end = (counts.get(cursor) ?? 0) > 0 ? cursor : null
+  let end: string | null = null
+  for (const [date, count] of counts) {
+    // ISO dates sort lexicographically, and every key here already parsed.
+    if (count > 0 && (end === null || date > end)) end = date
+  }
   if (end === null) return EMPTY_RANGE
 
+  const gapDays = Math.round((toTimestamp(today) - toTimestamp(end)) / MS_PER_DAY)
+  if (gapDays > GRACE_DAYS) return EMPTY_RANGE
+
   let length = 0
-  let start = cursor
+  let start = end
+  let cursor = end
   // `counts` is finite, so the walk terminates at the first day the calendar
   // does not cover even if every covered day is non-zero.
   while ((counts.get(cursor) ?? 0) > 0) {
@@ -133,9 +171,51 @@ function longestStreak(counts: Map<string, number>): StreakRange {
   return best
 }
 
-/** `YYYY-MM-DD` for the current UTC day. The only clock read in the codebase. */
+/** `YYYY-MM-DD` for the current UTC day. */
 export function utcToday(now: Date = new Date()): string {
   return now.toISOString().slice(0, 10)
+}
+
+/**
+ * Anywhere on Earth is UTC−12: the last zone on the planet to leave a date.
+ * Shifting the instant back by that much and reading the UTC date off it is the
+ * same thing as reading the date in that zone, and needs no timezone database.
+ */
+const AOE_OFFSET_MS = 12 * 60 * 60 * 1000
+
+/** `YYYY-MM-DD` in UTC−12. The default meaning of "today" for a streak. */
+export function anywhereOnEarthToday(now: Date = new Date()): string {
+  return utcToday(new Date(now.getTime() - AOE_OFFSET_MS))
+}
+
+/**
+ * The day a streak is measured against: the reader's zone if they named one,
+ * Anywhere on Earth otherwise.
+ *
+ * A zone that the runtime will not accept falls back to the default rather than
+ * throwing. `params.ts` has already checked it against the runtime's own list,
+ * so reaching that path means the two disagree — which is still not a reason to
+ * hand somebody a broken image.
+ */
+export function referenceToday(zone: string | null, now: Date = new Date()): string {
+  if (zone === null) return anywhereOnEarthToday(now)
+
+  try {
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(now)
+
+    const part = (type: string) => parts.find((entry) => entry.type === type)?.value ?? ''
+    const [year, month, day] = [part('year'), part('month'), part('day')]
+    if (year === '' || month === '' || day === '') return anywhereOnEarthToday(now)
+
+    return `${year.padStart(4, '0')}-${month}-${day}`
+  } catch {
+    return anywhereOnEarthToday(now)
+  }
 }
 
 /** Calendar day `delta` days from `date`, in UTC. */

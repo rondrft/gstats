@@ -62,12 +62,23 @@ describe('data parameters do participate in the key', () => {
     expect(keyFor('username=OctoCat')).toBe(keyFor('username=octocat'))
   })
 
-  it('separates entries when the language count changes', () => {
-    expect(keyFor(`${base}&langs_count=4`)).not.toBe(keyFor(`${base}&langs_count=8`))
-  })
-
-  it('separates entries when the exclusions change', () => {
-    expect(keyFor(`${base}&exclude_langs=html`)).not.toBe(keyFor(base))
+  /**
+   * The language parameters used to be in here, one hash apiece, so a reader who
+   * wanted six languages instead of four paid for a fresh fetch of repositories
+   * the instance already held. They rank stored data rather than choosing what
+   * is fetched, and the ranking now happens when the card is drawn, so all four
+   * of them share one entry — the way `theme` always has.
+   */
+  it('shares one entry across every way of ranking the same repositories', () => {
+    for (const variant of [
+      'langs_count=8',
+      'lang_mode=repos',
+      'exclude_langs=html,go',
+      'include_langs=css',
+      'langs_count=2&lang_mode=repos&exclude_langs=rust',
+    ]) {
+      expect(keyFor(`${base}&${variant}`)).toBe(keyFor(base))
+    }
   })
 
   /** Hiding a module skips its query, so it changes what was fetched. */
@@ -79,6 +90,22 @@ describe('data parameters do participate in the key', () => {
   it('does not care about the order or case of a list', () => {
     expect(keyFor(`${base}&hide=langs,total`)).toBe(keyFor(`${base}&hide=TOTAL,langs`))
     expect(keyFor(`${base}&exclude_langs=css,html`)).toBe(keyFor(`${base}&exclude_langs=HTML,css`))
+  })
+
+  /**
+   * `tz` is the odd one out: it does not change the upstream request at all. It
+   * changes the `streaks` computed from the answer, and that is what gets
+   * stored, so two zones cannot share an entry.
+   */
+  it('separates entries when the streak timezone changes', () => {
+    expect(keyFor(`${base}&tz=Pacific/Auckland`)).not.toBe(keyFor(base))
+    expect(keyFor(`${base}&tz=Pacific/Auckland`)).not.toBe(keyFor(`${base}&tz=Europe/Madrid`))
+  })
+
+  /** A zone spelled differently, or not recognised, must not fragment the cache. */
+  it('keeps one entry per zone however it was spelled', () => {
+    expect(keyFor(`${base}&tz=pacific/auckland`)).toBe(keyFor(`${base}&tz=Pacific/Auckland`))
+    expect(keyFor(`${base}&tz=Mars/Olympus_Mons`)).toBe(keyFor(base))
   })
 })
 
@@ -104,7 +131,7 @@ describe('shape validation', () => {
         longest: { length: 0, start: null, end: null },
       },
       calendar: { from: '2025-07-21', counts: [0, 1] },
-      languages: [],
+      repos: { langs: [], repos: [] },
       fetchedAt: 0,
     },
   }
@@ -125,7 +152,7 @@ describe('shape validation', () => {
       'totalContributions',
       'yearContributions',
       'bestYearContributions',
-      'languages',
+      'repos',
       'streaks',
     ] as const) {
       const { [field]: _dropped, ...rest } = current.data

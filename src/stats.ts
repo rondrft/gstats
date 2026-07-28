@@ -17,9 +17,10 @@ import { type CacheEntry, cacheKey, isFresh, KV_FRESH_SECONDS, type StatsCache }
 import type { GitHubClient } from './github/client'
 import { compactCalendar, fetchContributions } from './github/contributions'
 import { fetchLanguages } from './github/languages'
-import type { LanguageStat, StatsData } from './github/types'
+import type { StatsData } from './github/types'
+import { EMPTY_SAMPLE, type RepoSample } from './languages'
 import type { CardParams } from './params'
-import { computeStreaks, utcToday } from './streak'
+import { computeStreaks, referenceToday, utcToday } from './streak'
 
 /**
  * Remaining requests below which the service stops spending quota on cache
@@ -111,25 +112,32 @@ async function runningLow(deps: StatsDeps): Promise<boolean> {
 }
 
 async function fetchStats(deps: StatsDeps, params: CardParams): Promise<StatsData> {
-  const today = utcToday(new Date(deps.now))
+  const now = new Date(deps.now)
+  // Two different days, and conflating them costs real contributions.
+  //
+  // The upstream window has to reach the end of the *UTC* day or it truncates
+  // work that has already happened: Anywhere on Earth is up to twelve hours
+  // behind, so asking GitHub for "up to AoE today" would discard this morning.
+  //
+  // The reference day is what the figures are then interpreted against, and it
+  // is the reader's zone or AoE. Everything the card says about "today" —
+  // whether the streak is alive, where the heatmap's last column falls — hangs
+  // off this one, and the calendar covers both because it is fetched to the
+  // wider of the two.
+  const fetchThrough = utcToday(now)
+  const today = referenceToday(params.tz, now)
   const wantsLanguages = !params.hide.has('langs')
 
   // Both halves are independent; running them together roughly halves the
   // latency of a cache miss, which is the only latency a reader ever sees.
   const [contributions, languages] = await Promise.allSettled([
     fetchContributions(deps.client, params.username, {
-      today,
+      today: fetchThrough,
       includeHistory: !params.hide.has('total'),
     }),
     wantsLanguages
-      ? fetchLanguages(deps.client, params.username, {
-          limit: params.langsCount,
-          exclude: params.excludeLangs,
-          include: params.includeLangs,
-          mode: params.langMode,
-          now: deps.now,
-        })
-      : Promise.resolve<LanguageStat[]>([]),
+      ? fetchLanguages(deps.client, params.username, deps.now)
+      : Promise.resolve<RepoSample>(EMPTY_SAMPLE),
   ])
 
   if (contributions.status === 'rejected') throw contributions.reason
@@ -146,7 +154,7 @@ async function fetchStats(deps: StatsDeps, params: CardParams): Promise<StatsDat
     // A language query that fails degrades to an empty block rather than taking
     // the whole card down: the contribution half is already correct and
     // complete, and a partial card is more useful than an error.
-    languages: languages.status === 'fulfilled' ? languages.value : [],
+    repos: languages.status === 'fulfilled' ? languages.value : EMPTY_SAMPLE,
     fetchedAt: deps.now,
   }
 }

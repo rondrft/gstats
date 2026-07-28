@@ -172,6 +172,29 @@ describe('booleans', () => {
   })
 })
 
+describe('tz', () => {
+  it('defaults to null, which the streak reads as Anywhere on Earth', () => {
+    expect(parseOk('username=x').tz).toBeNull()
+  })
+
+  it('accepts an IANA zone and canonicalises its spelling', () => {
+    expect(parseOk('username=x&tz=Europe/Madrid').tz).toBe('Europe/Madrid')
+    expect(parseOk('username=x&tz=america/new_york').tz).toBe('America/New_York')
+    expect(parseOk('username=x&tz=  Asia/Tokyo  ').tz).toBe('Asia/Tokyo')
+  })
+
+  /**
+   * A misspelt zone is the default, never an error. The reader of a README
+   * cannot see an error body, and a streak drawn against a different midnight
+   * is not worth a broken image.
+   */
+  it('falls back to the default for anything it does not recognise', () => {
+    for (const bad of ['', 'nowhere', 'UTC+5', 'Mars/Olympus_Mons', '../etc/passwd']) {
+      expect(parseOk(`username=x&tz=${encodeURIComponent(bad)}`).tz).toBeNull()
+    }
+  })
+})
+
 describe('style parameters on a rejected request', () => {
   /**
    * The error card is drawn with whatever style survived parsing, so a themed

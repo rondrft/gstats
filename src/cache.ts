@@ -37,8 +37,12 @@ import type { DataParams } from './params'
  *
  * v2: added `calendar`, `yearContributions` and `bestYearContributions`, and
  *     changed how `languages` is ranked.
+ * v3: streaks are measured against Anywhere on Earth rather than UTC, so a
+ *     stored `streaks` can be a day different from what the same calendar
+ *     produces now; and `languages` — a finished ranking — became `repos`, the
+ *     repositories it is now derived from at render time.
  */
-const SCHEMA_VERSION = 'v2'
+const SCHEMA_VERSION = 'v3'
 
 /**
  * How long a KV entry counts as fresh.
@@ -94,24 +98,28 @@ export function cachePrefix(username: string, build: string): string {
 /**
  * Cache key: `<schema>:<build>:<login>:<hash of the data-shaping parameters>`.
  *
- * Only inputs that change the *bytes we fetch* participate in the hash: the
- * username, how the languages are ranked and filtered, and which modules are
- * hidden (hiding a module skips its query entirely). Style parameters are
- * deliberately absent — the entry holds data, not pixels, so a request in a
- * different theme reuses whatever an earlier request already paid for.
+ * Only inputs that change what ends up *stored* participate in the hash: the
+ * username, which modules are hidden (hiding one skips its query entirely), and
+ * the zone the streak's day boundary is drawn in. Everything else is absent —
+ * the entry holds data, not pixels, so a request in a different theme reuses
+ * whatever an earlier request already paid for.
+ *
+ * The four language parameters used to be here and are not any more. They never
+ * changed the request sent upstream, only how its answer was ranked, so each
+ * combination somebody wrote into a URL bought its own fetch of bytes the
+ * instance already had. The entry now holds the repositories and the ranking is
+ * applied when the card is drawn.
+ *
+ * `tz` is the one member that costs a fetch without changing the upstream
+ * request: the same calendar is turned into a different `streaks` before it is
+ * written. Almost every reader takes the default and shares one entry.
  *
  * The build component retires every entry on deploy, which is not free: the
  * first request for each profile after a release is a miss, so a deploy spends
  * fresh GitHub quota in proportion to how many distinct profiles are active.
  */
 export function cacheKey(params: DataParams, build: string): string {
-  const dataShape = [
-    `l=${params.langsCount}`,
-    `m=${params.langMode}`,
-    `x=${[...params.excludeLangs].sort().join('|')}`,
-    `i=${[...params.includeLangs].sort().join('|')}`,
-    `h=${[...params.hide].sort().join('|')}`,
-  ].join(';')
+  const dataShape = [`h=${[...params.hide].sort().join('|')}`, `z=${params.tz ?? ''}`].join(';')
 
   return cachePrefix(params.username, build) + fingerprint(dataShape)
 }
@@ -158,7 +166,10 @@ export function hasCurrentShape(entry: unknown): entry is CacheEntry {
     typeof data.totalContributions === 'number' &&
     typeof data.yearContributions === 'number' &&
     typeof data.bestYearContributions === 'number' &&
-    Array.isArray(data.languages) &&
+    typeof data.repos === 'object' &&
+    data.repos !== null &&
+    Array.isArray(data.repos.langs) &&
+    Array.isArray(data.repos.repos) &&
     typeof data.streaks === 'object' &&
     data.streaks !== null &&
     typeof data.calendar === 'object' &&

@@ -6,8 +6,10 @@ like polish and are not.
 Recently closed, so nobody goes looking for them: per-address rate limiting, the
 write-budget figure at `/health`, stale-while-error, the language bars that did
 not scale with their percentage, the ring track that made a third look like four
-fifths on light themes, and the quota reading that was written on every cache
-miss — and then sampled, and now not written at all unless it is bad news.
+fifths on light themes, the quota reading that was written on every cache miss —
+and then sampled, and now not written at all unless it is bad news — the streak's
+day boundary moving from UTC to Anywhere on Earth, and the language parameters
+leaving the cache key.
 
 ---
 
@@ -55,21 +57,7 @@ one. But anybody putting this behind a domain they own should know that the WAF
 becomes available as a layer in front of the in-Worker limits, and that
 `caches.default` starts working, which makes the item above cheap.
 
-## 3. Streak timezone: default to Anywhere on Earth
-
-Streaks are computed in UTC and documented as such, which is defensible — see
-[decisions.md](decisions.md#streaks-are-computed-in-utc-and-todays-zero-does-not-break-one).
-But for anybody west of UTC, a commit late on their Monday evening lands on
-Tuesday UTC, and a streak can appear to break on a day they worked.
-
-**Anywhere on Earth** (UTC−12) is the standard answer: a day counts as long as it
-is still that day *somewhere*. It never breaks a streak early, only late, which
-is the right direction for a figure meant to encourage. Add a `tz` parameter for
-people who want their own zone, with AoE as the default.
-
-This changes what a stored figure means, so it requires a `SCHEMA_VERSION` bump.
-
-## 4. Reduce KV writes further
+## 3. Reduce KV writes further
 
 The binding constraint is writes ([limits.md](limits.md)). The quota reading has
 been dealt with twice over — sampled rather than written per miss, and then moved
