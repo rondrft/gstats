@@ -8,6 +8,46 @@ const byteLength = (svg: string) => new TextEncoder().encode(svg).length
 const render = (query: string) => renderCard(statsFixture(), paramsFixture(query))
 const widthOf = (svg: string) => Number(/ width="(\d+)"/.exec(svg)?.[1] ?? 0)
 
+/**
+ * The largest card each design can be asked to draw.
+ *
+ * Measuring the budget against the ordinary fixture is what let a 13.5 KB
+ * heatmap reach production. Two things were wrong with it. The heatmap draws one
+ * element per day that had *any* activity, so its size tracks how busy the
+ * account is, and the fixture's synthetic year is idle about a third of the time
+ * — a daily committer has 371 active days where it has roughly 240. And asking
+ * for `langs_count=8` against a fixture holding four languages draws four rows,
+ * so the largest language block was never actually rendered.
+ *
+ * Everything is at the end of its range here at once: a full year with no gaps,
+ * six-figure numbers, a long display name and eight languages to list.
+ */
+const WORST_CASE = statsFixture({
+  name: 'A Person With An Extremely Long Display Name Indeed',
+  totalContributions: 482_193,
+  yearContributions: 128_402,
+  bestYearContributions: 128_402,
+  streaks: {
+    current: { length: 371, start: '2025-07-21', end: '2026-07-26' },
+    longest: { length: 371, start: '2025-07-21', end: '2026-07-26' },
+  },
+  // Every day active, and spread across the range so all five levels are used.
+  calendar: {
+    from: '2025-07-21',
+    counts: Array.from({ length: 371 }, (_, index) => 1 + ((index * 7) % 23)),
+  },
+  languages: [
+    { name: 'Jupyter Notebook', color: '#DA5B0B', size: 900_000, pct: 0.22 },
+    { name: 'TypeScript', color: '#3178c6', size: 800_000, pct: 0.2 },
+    { name: 'Objective-C++', color: '#6866fb', size: 700_000, pct: 0.17 },
+    { name: 'JavaScript', color: '#f1e05a', size: 600_000, pct: 0.15 },
+    { name: 'Python', color: '#3572A5', size: 400_000, pct: 0.1 },
+    { name: 'Rust', color: '#dea584', size: 300_000, pct: 0.07 },
+    { name: 'Kotlin', color: '#A97BFF', size: 200_000, pct: 0.05 },
+    { name: 'Go', color: '#00ADD8', size: 150_000, pct: 0.04 },
+  ],
+})
+
 describe('registry', () => {
   it('resolves every published id to its own renderer', () => {
     for (const id of CARD_IDS) {
@@ -53,8 +93,9 @@ describe.each(CARD_IDS)('%s', (card) => {
     expect(svg.endsWith('</svg>')).toBe(true)
   })
 
-  it('stays inside the size budget at the largest language count', () => {
-    expect(byteLength(render(`${base}&langs_count=8`))).toBeLessThan(SIZE_BUDGET)
+  it('stays inside the size budget on the largest card it can be asked for', () => {
+    const svg = renderCard(WORST_CASE, paramsFixture(`${base}&langs_count=8`))
+    expect(byteLength(svg)).toBeLessThan(SIZE_BUDGET)
   })
 
   it('honours the theme', () => {

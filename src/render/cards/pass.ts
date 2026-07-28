@@ -11,7 +11,7 @@
  * and as paper in a light one. Choosing `theme=light` gives the literal article.
  */
 
-import type { StatsData } from '../../github/types'
+import type { CardData } from '../../github/types'
 import { credit, MONO_STACK, plate, round, svgDocument, text } from '../chrome'
 import { mix } from '../color'
 import { layoutRow } from '../layout'
@@ -36,7 +36,20 @@ const PERFORATION_AT = 0.78
 const BARCODE_HEIGHT = 22
 const BARCODE_WIDTH = 76
 
-function renderPass(data: StatsData, { params, strings }: RenderOptions): string {
+/**
+ * Air on each side of the stub's contents, inside the block it is laid out as.
+ *
+ * The stub carries the largest number on the card and the barcode under it, and
+ * at the shared margin it had thirteen units to the tear and twenty to the card
+ * edge — the tightest thing on the design. Padding the block rather than the
+ * card keeps `layoutRow` the only thing choosing coordinates.
+ */
+const STUB_PADDING = 10
+
+/** Radius of the notch punched at each end of the tear line. */
+const NOTCH_RADIUS = 4
+
+function renderPass(data: CardData, { params, strings }: RenderOptions): string {
   const { style } = params
   const stats = visibleStats(data, params, strings)
 
@@ -47,10 +60,12 @@ function renderPass(data: StatsData, { params, strings }: RenderOptions): string
   }))
 
   const streak = stats.find((stat) => stat.module === 'streak') ?? stats[0]
-  const stubWidth = Math.max(
-    BARCODE_WIDTH,
-    streak === undefined ? 0 : textWidth(streak.formatted, STUB_VALUE_SIZE),
-  )
+  const stubWidth =
+    Math.max(
+      BARCODE_WIDTH,
+      streak === undefined ? 0 : textWidth(streak.formatted, STUB_VALUE_SIZE),
+    ) +
+    STUB_PADDING * 2
 
   const GAP = 26
   const body = layoutRow([...columns, { width: stubWidth, height: BARCODE_HEIGHT }], {
@@ -135,14 +150,28 @@ function bodyFrame(width: number, style: { border: string; muted: string }): str
 
 /**
  * The tear line, with a notch punched at each end. The notches are filled with
- * the card's own background so they read as holes rather than as dots.
+ * the card's own background so they read as holes punched through the paper
+ * rather than as dots drawn on it.
+ *
+ * They are half discs, not circles. A full circle centred on the body's top edge
+ * puts half of itself — four units — on top of the solid accent band, where a
+ * background-coloured disc reads as a blot sitting on the band instead of as a
+ * hole in the edge below it. **Reported from production, on the orange theme
+ * where the contrast makes it obvious.** Each notch now opens into the body and
+ * stops exactly at the edge it is punched into.
  */
 function perforation(x: number, stroke: string, bg: string): string {
+  const r = NOTCH_RADIUS
+  // Sweep 0 bulges downwards from the top edge, sweep 1 upwards from the bottom;
+  // in SVG's y-down space those are the directions that open into the body.
+  const notch = (y: number, sweep: 0 | 1) =>
+    `<path d="M${round(x - r)} ${y}A${r} ${r} 0 0 ${sweep} ${round(x + r)} ${y}Z" fill="${bg}"/>`
+
   return (
     `<line x1="${x}" y1="${BAND_HEIGHT + 6}" x2="${x}" y2="${HEIGHT - 6}" stroke="${stroke}" ` +
     `stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>` +
-    `<circle cx="${x}" cy="${BAND_HEIGHT}" r="4" fill="${bg}"/>` +
-    `<circle cx="${x}" cy="${HEIGHT}" r="4" fill="${bg}"/>`
+    notch(BAND_HEIGHT, 0) +
+    notch(HEIGHT, 1)
   )
 }
 
@@ -183,7 +212,7 @@ function stub(
  * reads as a printing error rather than as a stub.
  */
 function footer(
-  data: StatsData,
+  data: CardData,
   stats: readonly { detail: string }[],
   perforationX: number,
   style: { muted: string },

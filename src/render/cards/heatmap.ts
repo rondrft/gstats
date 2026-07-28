@@ -19,9 +19,18 @@
  * empty grid is one tiled `<rect>`, and only days with activity are drawn on top
  * of it, grouped by level so the fill is written five times rather than once per
  * day.
+ *
+ * That still leaves the active days, and they are what decides the document's
+ * size: an account that commits daily has 371 of them where a quiet one has 90.
+ * A cell carries only its column, because there is one symbol per weekday row
+ * and the row's `y` lives in the symbol rather than in every cell that sits on
+ * it. **The obvious `<use href="#d" x y>` was what shipped, and a daily
+ * committer's card came to 13.5 KB against a 12 KB budget the tests believed
+ * they were enforcing** — the fixture they measured was not dense enough to
+ * reach it. `ROW_IDS` is what buys the difference; the geometry is unchanged.
  */
 
-import type { CompactCalendar, StatsData } from '../../github/types'
+import type { CardData, CompactCalendar } from '../../github/types'
 import { addDays } from '../../streak'
 import { credit, frame, motion, plate, round, svgDocument, text } from '../chrome'
 import { mix } from '../color'
@@ -51,12 +60,18 @@ const BLOCK_HEIGHT = GRID_TOP + GRID_HEIGHT
 /** One column of reveal per 8ms, which crosses the year in under half a second. */
 const WIPE_MS = WEEKS * 8
 
+/**
+ * One symbol id per weekday row, each a cell already carrying that row's `y`.
+ * A drawn day then costs its column and nothing else.
+ */
+const ROW_IDS = ['a', 'b', 'c', 'd', 'e', 'f', 'g'] as const
+
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 /** Columns a three-letter month name occupies, and so the closest two may sit. */
 const MONTH_MIN_COLUMNS = 3
 
-function renderHeatmap(data: StatsData, { params, strings }: RenderOptions): string {
+function renderHeatmap(data: CardData, { params, strings }: RenderOptions): string {
   const { style } = params
   const stats = visibleStats(data, params, strings)
 
@@ -147,7 +162,9 @@ function grid(
     const slot = index + offset
     const column = Math.floor(slot / DAYS)
     if (column >= WEEKS) return
-    byLevel[level]?.push(`<use href="#d" x="${column * PITCH}" y="${(slot % DAYS) * PITCH}"/>`)
+    // The row is chosen by which symbol is referenced; only the column is
+    // written out. See ROW_IDS for why that is worth the seven definitions.
+    byLevel[level]?.push(`<use href="#${ROW_IDS[slot % DAYS]}" x="${column * PITCH}"/>`)
   })
 
   const cells = byLevel
@@ -155,6 +172,14 @@ function grid(
       uses.length === 0 ? '' : `<g fill="${ramp[level]}">${uses.join('')}</g>`,
     )
     .join('')
+
+  // One cell shape per weekday row, each pre-placed at that row's height. The
+  // first has no `y` at all, which is also the one the empty pattern tiles.
+  const rows = ROW_IDS.map(
+    (id, row) =>
+      `<rect id="${id}" width="${CELL}" height="${CELL}" rx="1.5"` +
+      `${row === 0 ? '' : ` y="${row * PITCH}"`}/>`,
+  ).join('')
 
   // The reveal is a clip rectangle sliding in from the left in whole columns,
   // rather than 53 separately delayed groups. It is a fraction of the bytes and
@@ -166,14 +191,14 @@ function grid(
   const open = animate ? `<g clip-path="url(#wipe)">` : '<g>'
 
   return (
-    `<defs><rect id="d" width="${CELL}" height="${CELL}" rx="1.5"/>${clip}</defs>` +
+    `<defs>${rows}${clip}</defs>` +
     `<g transform="translate(${round(x)} ${round(y)})">` +
     `<rect width="${GRID_WIDTH}" height="${GRID_HEIGHT}" fill="url(#empty)"/>` +
     open +
     cells +
     `</g></g>` +
     `<defs><pattern id="empty" width="${PITCH}" height="${PITCH}" patternUnits="userSpaceOnUse">` +
-    `<use href="#d" fill="${ramp[0]}"/></pattern></defs>`
+    `<use href="#${ROW_IDS[0]}" fill="${ramp[0]}"/></pattern></defs>`
   )
 }
 
