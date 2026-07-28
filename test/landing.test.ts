@@ -31,7 +31,7 @@ describe('landing page', () => {
       new RegExp(`<meta ${attribute}="${name}" content="([^"]+)"`).exec(page)?.[1]
 
     expect(meta('property', 'og:type')).toBe('website')
-    expect(meta('property', 'og:title')).toContain('phosphor-stats')
+    expect(meta('property', 'og:title')).toContain('gstats')
     expect(meta('property', 'og:description')?.length ?? 0).toBeGreaterThan(30)
     expect(meta('property', 'og:url')).toBe('https://stats.example.com/')
     expect(meta('name', 'twitter:card')).toBe('summary_large_image')

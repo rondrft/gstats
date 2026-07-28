@@ -289,9 +289,9 @@ describe('theming', () => {
   })
 
   it('adds the project credit only when it is asked for', () => {
-    expect(renderCard(statsFixture(), paramsFixture())).not.toContain('phosphor-stats')
+    expect(renderCard(statsFixture(), paramsFixture())).not.toContain('>gstats<')
     expect(renderCard(statsFixture(), paramsFixture('username=x&show_credit=true'))).toContain(
-      'phosphor-stats',
+      '>gstats<',
     )
   })
 })

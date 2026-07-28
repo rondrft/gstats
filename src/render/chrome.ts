@@ -98,7 +98,7 @@ export function credit(width: number, height: number, style: StyleParams): strin
   if (!style.showCredit) return ''
   return (
     `<text x="${round(width - FRAME_INSET / 2)}" y="${height - 3}" text-anchor="end" ` +
-    `font-size="7" fill="${style.muted}" opacity="0.55">phosphor-stats</text>`
+    `font-size="7" fill="${style.muted}" opacity="0.55">gstats</text>`
   )
 }
 

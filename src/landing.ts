@@ -24,7 +24,7 @@ const REPO_URL = 'https://github.com/rondrft/gstats'
  * and both sets of sharing tags. They were going to drift the first time one of
  * them was reworded.
  */
-const PAGE_TITLE = 'phosphor-stats — GitHub stats cards for your README'
+const PAGE_TITLE = 'gstats — GitHub stats cards for your README'
 const PAGE_DESCRIPTION =
   'Generate an SVG GitHub stats card for any username. Contributions, streaks and languages, rendered on the edge.'
 
@@ -93,14 +93,14 @@ export function landingPage(origin: string): string {
      origin the request arrived on so that a self-hosted instance advertises
      itself rather than this one. -->
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="phosphor-stats">
+<meta property="og:site_name" content="gstats">
 <meta property="og:title" content="${PAGE_TITLE}">
 <meta property="og:description" content="${PAGE_DESCRIPTION}">
 <meta property="og:url" content="${origin}/">
 <meta property="og:image" content="${SOCIAL_PREVIEW_URL}">
 <meta property="og:image:width" content="1280">
 <meta property="og:image:height" content="640">
-<meta property="og:image:alt" content="phosphor-stats — GitHub stats cards rendered as SVG">
+<meta property="og:image:alt" content="gstats — GitHub stats cards rendered as SVG">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:title" content="${PAGE_TITLE}">
 <meta name="twitter:description" content="${PAGE_DESCRIPTION}">
@@ -276,7 +276,7 @@ export function landingPage(origin: string): string {
       <!-- Served by the Worker rather than inlined: the file carries gradient
            ids, and inlining would put them in the same document as the page. -->
       <img class="mark" src="/logo.svg" width="32" height="32" alt="" aria-hidden="true">
-      <h1>phosphor-stats</h1>
+      <h1>gstats</h1>
       <div class="badges">
         <a href="${REPO_URL}"><img src="https://img.shields.io/github/stars/rondrft/gstats?style=flat-square&labelColor=080D08&color=EF9F27" alt="GitHub stars"></a>
         <a href="${REPO_URL}/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-1D9E75?style=flat-square&labelColor=080D08" alt="MIT license"></a>

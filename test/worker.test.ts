@@ -32,7 +32,7 @@ describe('routing', () => {
 
     expect(response.status).toBe(200)
     expect(response.headers.get('content-type')).toContain('text/html')
-    await expect(response.text()).resolves.toContain('phosphor-stats')
+    await expect(response.text()).resolves.toContain('gstats')
   })
 
   it('reports its own state at /health', async () => {
@@ -230,7 +230,7 @@ describe('cards', () => {
     expect(github.calls).toBe(callsAfterFirst)
     // A render-only parameter changed the output of a cache hit, which it could
     // not do if the entry held a finished document.
-    await expect(hidden.text()).resolves.toContain('phosphor-stats')
+    await expect(hidden.text()).resolves.toContain('>gstats<')
   })
 
   it('refetches when a parameter changes which data is needed', async () => {

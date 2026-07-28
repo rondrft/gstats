@@ -48,6 +48,12 @@ Committed but not yet deployed.
   everybody west of Greenwich. The cost is the opposite error: a new day can take
   up to twelve further hours to appear. **This can change the current streak a
   card shows by one, in the direction of showing more.** `1e20bba`
+- **The project is called `gstats`.** The repository, both Workers and the
+  branding follow the name; `show_credit=true` now draws `gstats` on the card
+  instead of `phosphor-stats`. That is the only rendered output the rename
+  touches, and it is opt-in with a default of `false`. **The `phosphor` theme is
+  unchanged** — that one is a public parameter value sitting in other people's
+  READMEs, and renaming it would break them.
 - The four language parameters — `lang_mode`, `langs_count`, `exclude_langs`,
   `include_langs` — no longer cost a separate fetch from GitHub. They rank data
   that has already been fetched, so they now behave the way `theme` always has.

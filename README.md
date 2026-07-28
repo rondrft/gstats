@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="assets/brand/logo.svg" width="96" height="96" alt="phosphor-stats">
+  <img src="assets/brand/logo.svg" width="96" height="96" alt="gstats">
 </p>
 
-# phosphor-stats
+# gstats
 
 GitHub stats cards for your README. Contributions, streaks and languages, rendered as SVG on the edge.
 
@@ -10,7 +10,7 @@ GitHub stats cards for your README. Contributions, streaks and languages, render
 [![License: MIT](https://img.shields.io/badge/license-MIT-1D9E75?style=flat-square&labelColor=080D08)](LICENSE)
 [![Stars](https://img.shields.io/github/stars/rondrft/gstats?style=flat-square&labelColor=080D08&color=EF9F27)](https://github.com/rondrft/gstats/stargazers)
 
-![A phosphor-stats card](docs/assets/terminal.svg)
+![A gstats card](docs/assets/terminal.svg)
 
 ```markdown
 ![My GitHub stats](https://gstats.rondrft.workers.dev/api?username=USERNAME)
@@ -40,7 +40,7 @@ which builds the snippet for you.
 
 ### `terminal` — three rings and a language column
 
-The default, in the phosphor palette the project is named for.
+The default, in the phosphor palette this project was originally named for.
 
 ![terminal design](docs/assets/terminal.svg)
 
