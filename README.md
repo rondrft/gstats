@@ -280,6 +280,8 @@ Before changing anything that looks arbitrary, read
 working around something, and several were written the obvious way first and
 corrected once a test proved the obvious way was wrong.
 
+- [CHANGELOG.md](CHANGELOG.md) — what changed and when. Worth a look if a card
+  you published starts showing a different figure.
 - [docs/decisions.md](docs/decisions.md) — why things are the way they are.
 - [docs/limits.md](docs/limits.md) — the quota arithmetic. The ceiling is KV
   writes, not the GitHub quota.

@@ -43,19 +43,37 @@ const SOCIAL_PREVIEW_URL = `${REPO_URL.replace('github.com', 'raw.githubusercont
 const DEMO_USER = 'rondrft'
 
 /**
- * The parameters worth knowing about without leaving the page, in the order
- * somebody reaches for them. It fills the space beside the taller control
- * column and saves a trip to the README for the common cases; the exhaustive
- * table stays in the README, where it can afford the room.
+ * Every parameter `/api` accepts, with its default.
+ *
+ * It was seven of them once, with the descriptions cut short, chosen so the
+ * panel finished level with the taller control column beside it. That is
+ * choosing the layout over the content: somebody looking for `lang_mode` found
+ * a table that did not mention it and no indication that it existed. The
+ * columns are uneven now, which is the correct thing for them to be.
  */
-const REFERENCE: [string, string][] = [
-  ['hide', 'total, streak, best, langs'],
-  ['exclude_langs', 'drop languages, comma separated'],
-  ['include_langs', 'bring back HTML, CSS, Shell'],
-  ['lang_style', 'blocks or bars'],
-  ['text / muted / border', 'hex, or none for the border'],
-  ['radius', 'corner radius, 0 to 24'],
-  ['cache_seconds', '1800 to 86400'],
+const REFERENCE: [name: string, values: string, fallback: string][] = [
+  ['username', 'a GitHub login', 'required'],
+  ['card', 'terminal, heatmap, pass, press, gauge, vinyl', 'terminal'],
+  ['theme', 'phosphor, amber, ice, mono, light', 'phosphor'],
+  ['ring', 'hex — the contribution and record rings', 'theme'],
+  ['accent', 'hex — the streak ring and its icon', 'theme'],
+  ['bg', 'hex, or transparent', 'theme'],
+  ['text', 'hex — the numbers and language rows', 'theme'],
+  ['muted', 'hex — the labels', 'theme'],
+  ['border', 'hex, or none to hide the frame', 'theme'],
+  ['radius', 'corner radius, 0 to 24', '6'],
+  ['hide', 'total, streak, best, langs — comma separated', 'nothing hidden'],
+  ['langs_count', 'how many languages to list, 1 to 8', '4'],
+  ['lang_mode', 'bytes, or repos to count what each language leads', 'bytes'],
+  ['exclude_langs', 'languages to drop, comma separated', 'none'],
+  ['include_langs', 'bring back HTML, CSS, Shell and the rest', 'none'],
+  ['lang_style', 'blocks or bars', 'blocks'],
+  ['scanlines', 'CRT banding over the background', 'true'],
+  ['animate', 'draw-on animation', 'true'],
+  ['locale', 'label language: en or es', 'en'],
+  ['tz', 'IANA zone the streak day ends in', 'Anywhere on Earth'],
+  ['show_credit', 'a small project credit on the card', 'false'],
+  ['cache_seconds', 'how long a client may reuse the card, 1800 to 86400', 'instance default'],
 ]
 
 export function landingPage(origin: string): string {
@@ -223,6 +241,9 @@ export function landingPage(origin: string): string {
   .reference th, .reference td { text-align: left; padding: .28rem .8rem; vertical-align: top; }
   .reference th { color: var(--accent); font-weight: 400; white-space: nowrap; }
   .reference td { color: var(--muted); }
+  /* The default is the answer to "what happens if I leave this out", which is
+     worth a column of its own rather than a parenthesis inside the description. */
+  .reference td.default { text-align: right; white-space: nowrap; opacity: .75; }
   .reference tr + tr th, .reference tr + tr td { border-top: 1px solid rgba(29, 158, 117, .18); }
 
   .designs { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: var(--gap); }
@@ -346,11 +367,11 @@ ${THEME_NAMES.map((name) => `          <option value="${name}">${name}</option>`
       </div>
       <div class="panel reference">
         <table>
-          <caption>Everything else is a query parameter. Full table in the README.</caption>
+          <caption>Every parameter. Anything invalid falls back to its default.</caption>
           <tbody>
 ${REFERENCE.map(
-  ([name, description]) =>
-    `            <tr><th><code>${name}</code></th><td>${description}</td></tr>`,
+  ([name, values, fallback]) =>
+    `            <tr><th><code>${name}</code></th><td>${values}</td><td class="default">${fallback}</td></tr>`,
 ).join('\n')}
           </tbody>
         </table>

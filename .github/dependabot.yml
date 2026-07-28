@@ -1,0 +1,50 @@
+# Dependency updates.
+#
+# The project has zero runtime dependencies, so everything here is either a
+# development tool or a CI action — and both are things nobody notices are out of
+# date until one of them is the reason a security advisory applies. This repo can
+# go weeks without attention, and until now nothing would have said so.
+#
+# Dependabot rather than Renovate because it is native to GitHub and needs no app
+# installed on the repository. Renovate is the better tool if this ever wants
+# rules more subtle than the two below; the deciding factor is that an unattended
+# repo should not also depend on an unattended app installation.
+#
+# The grouping is the whole point. One PR of patches is a thing to merge on a
+# green CI run; eight separate PRs is a thing to ignore, which is how a project
+# ends up with none of them merged.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    commit-message:
+      prefix: build
+    groups:
+      # Everything safe, in one PR. If CI is green this is a merge and no more.
+      dev-patches:
+        patterns: ['*']
+        update-types: [patch]
+      # Minors together but separate, because they are worth a glance rather
+      # than a click. `@cloudflare/workers-types` is date-versioned and lands
+      # here most weeks, which is the intended amount of noise.
+      dev-minors:
+        patterns: ['*']
+        update-types: [minor]
+    # Majors are deliberately in no group, so each arrives on its own and gets
+    # read. A wrangler or vitest major is a change to how this is built and
+    # tested, not a version number.
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ['*']
+        update-types: [patch, minor]
