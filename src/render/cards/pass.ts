@@ -12,15 +12,30 @@
  */
 
 import type { CardData } from '../../github/types'
+import { SERVICE_NAME } from '../../service'
 import { credit, MONO_STACK, plate, round, svgDocument, text } from '../chrome'
 import { mix } from '../color'
-import { layoutRow } from '../layout'
+import { layoutRow, type RowLayout } from '../layout'
 import { textWidth } from '../metrics'
 import { describe, languageSummary, visibleStats } from './modules'
 import type { CardRenderer, RenderOptions } from './registry'
 
 const HEIGHT = 150
 const BAND_HEIGHT = 26
+
+/**
+ * The one horizontal number on the card, and the only one written down.
+ *
+ * `layoutRow` turns it into a content box, and everything with a left or a right
+ * edge is then derived from that box: the two lines of type on the band, the
+ * columns, the footer, and the hairline around the body.
+ *
+ * It was three numbers before — a frame typed in at 8, band type at 14, content
+ * at 20. Nothing was off centre; each pair was symmetric about the card's own
+ * axis. But the left edge showed a hairline, then the brand, then the first
+ * column, no two of them the same distance from the edge, and that reads as a
+ * card whose margins are wrong. **Reported from production.**
+ */
 const MARGIN = 20
 
 const BRAND_SIZE = 10
@@ -74,6 +89,7 @@ function renderPass(data: CardData, { params, strings }: RenderOptions): string 
     height: HEIGHT,
   })
 
+  const box = bodyBox(body)
   const paper = mix(style.bg, style.text, 0.06)
   const onBand = mix(style.bg, style.text, 0.05)
   // The tear falls in the gap before the stub. Deriving it from the layout keeps
@@ -86,10 +102,10 @@ function renderPass(data: CardData, { params, strings }: RenderOptions): string 
   const markup =
     plate(body.width, HEIGHT, style) +
     `<rect width="${body.width}" height="${HEIGHT}" rx="${style.radius}" fill="${paper}"/>` +
-    band(body.width, style, onBand, data.login) +
+    band(body, style, onBand, data.login) +
     // The frame surrounds the body only. Running it through the coloured band
     // would draw a hairline across the one solid area on the card.
-    bodyFrame(body.width, style) +
+    bodyFrame(box, style) +
     perforation(perforationX, style.muted, style.bg) +
     stats
       .map((stat, index) => {
@@ -103,32 +119,38 @@ function renderPass(data: CardData, { params, strings }: RenderOptions): string 
       })
       .join('') +
     stub(streak, stubX, stubWidth, data.login, style) +
-    footer(data, stats, perforationX, style) +
+    footer(data, stats, params.hide.has('langs'), body, box, perforationX, style) +
     credit(body.width, HEIGHT, style)
 
   return svgDocument({ width: body.width, height: HEIGHT, label: describe(data, stats) }, markup)
 }
 
-/** Solid header: the service on the left, the traveller on the right. */
+/**
+ * Solid header: the service on the left, the traveller on the right.
+ *
+ * Both lines sit on the content's own edges, so the brand stands directly over
+ * the first column below it and the login over the right edge of the stub. The
+ * band spans the card; only its type is aligned to the content.
+ */
 function band(
-  width: number,
+  body: RowLayout,
   style: { accent: string; radius: number },
   ink: string,
   login: string,
 ): string {
   return (
     `<path d="M0 ${BAND_HEIGHT}V${style.radius}a${style.radius} ${style.radius} 0 0 1 ${style.radius} -${style.radius}` +
-    `h${round(width - style.radius * 2)}a${style.radius} ${style.radius} 0 0 1 ${style.radius} ${style.radius}` +
+    `h${round(body.width - style.radius * 2)}a${style.radius} ${style.radius} 0 0 1 ${style.radius} ${style.radius}` +
     `v${BAND_HEIGHT - style.radius}z" fill="${style.accent}"/>` +
-    text('PHOSPHOR STATS', {
-      x: 14,
+    text(SERVICE_NAME.toUpperCase(), {
+      x: body.content.left,
       y: 17,
       size: BRAND_SIZE,
       fill: ink,
       letterSpacing: 1.5,
     }) +
     text(login.toUpperCase(), {
-      x: width - 14,
+      x: body.content.right,
       y: 18,
       size: LOGIN_SIZE,
       fill: ink,
@@ -138,12 +160,53 @@ function band(
   )
 }
 
-/** Hairline around the body, starting below the band. */
-function bodyFrame(width: number, style: { border: string; muted: string }): string {
+/**
+ * The body: everything below the band, inset on the sides and along the bottom,
+ * and by the same amount below the band.
+ *
+ * The inset is half the distance the content sits from the card's edge, so the
+ * hairline lands exactly midway between the two on every side it has. Taken
+ * from the measured content box rather than from the margin that was asked for:
+ * the card's width is rounded to a whole number, so half the margin and half the
+ * real gap differ by up to a quarter of a unit, and it is the real gap the eye
+ * compares.
+ *
+ * One box, so the hairline that draws it and the footer that sits inside it come
+ * from the same numbers. The footer used to be measured from the card's bottom
+ * edge instead, which meant moving the frame changed how much air it had.
+ */
+interface BodyBox {
+  inset: number
+  left: number
+  right: number
+  top: number
+  bottom: number
+}
+
+function bodyBox(body: RowLayout): BodyBox {
+  // Rounded here rather than at each use: the box is four coordinates that have
+  // to agree with each other, and half of a rounded card width does not.
+  const inset = round(body.content.left / 2)
+  return {
+    inset,
+    left: inset,
+    right: round(body.width - inset),
+    top: BAND_HEIGHT + inset,
+    bottom: round(HEIGHT - inset),
+  }
+}
+
+/**
+ * Hairline around the body.
+ *
+ * It cannot use `chrome.frame`: that one is inset from the card's four edges,
+ * and this one has to start where the band ends.
+ */
+function bodyFrame(box: BodyBox, style: { border: string; muted: string }): string {
   if (style.border === 'none' || style.border === 'transparent') return ''
-  const top = BAND_HEIGHT + 8
   return (
-    `<rect x="8" y="${top}" width="${round(width - 16)}" height="${round(HEIGHT - top - 8)}" ` +
+    `<rect x="${box.left}" y="${box.top}" width="${round(box.right - box.left)}" ` +
+    `height="${round(box.bottom - box.top)}" ` +
     `rx="2" fill="none" stroke="${style.border}" stroke-width="0.5"/>`
   )
 }
@@ -167,8 +230,11 @@ function perforation(x: number, stroke: string, bg: string): string {
   const notch = (y: number, sweep: 0 | 1) =>
     `<path d="M${round(x - r)} ${y}A${r} ${r} 0 0 ${sweep} ${round(x + r)} ${y}Z" fill="${bg}"/>`
 
+  // The dashes stop two units clear of each hole, at both ends.
+  const clearance = r + 2
+
   return (
-    `<line x1="${x}" y1="${BAND_HEIGHT + 6}" x2="${x}" y2="${HEIGHT - 6}" stroke="${stroke}" ` +
+    `<line x1="${x}" y1="${BAND_HEIGHT + clearance}" x2="${x}" y2="${HEIGHT - clearance}" stroke="${stroke}" ` +
     `stroke-width="1" stroke-dasharray="2 3" opacity="0.5"/>` +
     notch(BAND_HEIGHT, 0) +
     notch(HEIGHT, 1)
@@ -210,27 +276,41 @@ function stub(
  *
  * Both stay on the body side of the tear: text running under the perforation
  * reads as a printing error rather than as a stub.
+ *
+ * The language line is the one thing on this card that `hide` reaches without
+ * the row layout hearing about it — it is not one of the blocks, so nothing
+ * narrowed when it was asked for and nothing dropped it either. It was still
+ * being printed under `hide=langs`, and on a card narrowed by another hidden
+ * module it landed on top of the date range. **Found by rendering the
+ * combination rather than by reading the code.**
  */
 function footer(
   data: CardData,
   stats: readonly { detail: string }[],
+  hideLangs: boolean,
+  body: RowLayout,
+  box: BodyBox,
   perforationX: number,
   style: { muted: string },
 ): string {
   const detail = stats[0]?.detail ?? ''
-  const languages = languageSummary(data, '   ')
-  const baseline = HEIGHT - 13
+  const languages = hideLangs ? '' : languageSummary(data, '   ')
+  // Half the frame's own inset above its bottom edge: enough for a descender to
+  // clear the hairline, and it stays that way if the inset ever changes.
+  const baseline = box.bottom - box.inset / 2
 
   return (
-    text(detail, { x: MARGIN, y: baseline, size: FOOTER_SIZE, fill: style.muted }) +
-    text(languages, {
-      x: perforationX - 10,
-      y: baseline,
-      size: FOOTER_SIZE,
-      fill: style.muted,
-      family: MONO_STACK,
-      anchor: 'end',
-    })
+    text(detail, { x: body.content.left, y: baseline, size: FOOTER_SIZE, fill: style.muted }) +
+    (languages.length === 0
+      ? ''
+      : text(languages, {
+          x: perforationX - box.inset,
+          y: baseline,
+          size: FOOTER_SIZE,
+          fill: style.muted,
+          family: MONO_STACK,
+          anchor: 'end',
+        }))
   )
 }
 

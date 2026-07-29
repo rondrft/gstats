@@ -2,6 +2,7 @@ import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import { BRAND_PATHS, brandAsset } from '../src/brand'
 import worker, { type Env } from '../src/index'
+import { SERVICE_NAME } from '../src/service'
 
 const testEnv = env as unknown as Env
 
@@ -57,6 +58,19 @@ describe('brand routes', () => {
       } else {
         expect(new TextDecoder().decode(bytes), path).toContain('<svg')
       }
+    }
+  })
+
+  /**
+   * The icons carry the service's name as their accessible one, which is the
+   * only text in them and the one thing in a binary-ish asset that a rename has
+   * to reach. It missed them once.
+   */
+  it('calls the service by its current name', async () => {
+    for (const path of BRAND_PATHS.filter((path) => path.endsWith('.svg'))) {
+      const svg = await (await fetchBrand(path)).text()
+
+      expect(svg, path).toContain(`aria-label="${SERVICE_NAME}"`)
     }
   })
 

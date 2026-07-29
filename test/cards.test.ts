@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CARD_IDS, DEFAULT_CARD, renderCard, resolveRenderer } from '../src/render/cards'
+import { SERVICE_NAME } from '../src/service'
 import { calendarFixture, paramsFixture, statsFixture } from './helpers/fixtures'
 
 const SIZE_BUDGET = 12 * 1024
@@ -130,6 +131,35 @@ describe.each(CARD_IDS)('%s', (card) => {
     expect(hidden).not.toContain('longest streak')
     expect(full).toContain('current streak')
     expect(widthOf(hidden)).toBeLessThanOrEqual(widthOf(full))
+  })
+
+  /**
+   * `langs` is the module a design is most likely to draw from somewhere other
+   * than its layout — a footer line, a tracklist — and so the one `hide` is
+   * most likely to miss. `pass` printed its language summary under
+   * `hide=langs` for six designs' worth of history, and on a card narrowed by
+   * another hidden module it landed on top of the date range.
+   */
+  it('honours hide=langs, leaving no share behind', () => {
+    const shows = render(base).includes('41%')
+
+    // Named rather than skipped: the heatmap's whole subject is the calendar and
+    // it lists no languages, so there is nothing there for `hide` to remove. Any
+    // other design losing its language block is a regression, not an exemption.
+    expect(shows).toBe(card !== 'heatmap')
+    expect(render(`${base}&hide=langs`)).not.toContain('41%')
+  })
+
+  /**
+   * The service has one name. The `phosphor` theme keeps its own — that one is a
+   * parameter value sitting in other people's READMEs — but nothing on a card
+   * may still be calling the service what it was called before.
+   */
+  it('draws the project name only as the current one', () => {
+    const svg = render(`${base}&show_credit=true`)
+
+    expect(svg).toContain(SERVICE_NAME)
+    expect(svg.toLowerCase()).not.toMatch(/phosphor[\s-]*stats/)
   })
 
   it('emits no stylesheet when animation is switched off', () => {

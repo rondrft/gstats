@@ -9,6 +9,7 @@
  */
 
 import type { StyleParams } from '../params'
+import { SERVICE_NAME } from '../service'
 import { FRAME_INSET } from './layout'
 import { escapeXml } from './xml'
 
@@ -98,7 +99,7 @@ export function credit(width: number, height: number, style: StyleParams): strin
   if (!style.showCredit) return ''
   return (
     `<text x="${round(width - FRAME_INSET / 2)}" y="${height - 3}" text-anchor="end" ` +
-    `font-size="7" fill="${style.muted}" opacity="0.55">gstats</text>`
+    `font-size="7" fill="${style.muted}" opacity="0.55">${SERVICE_NAME}</text>`
   )
 }
 

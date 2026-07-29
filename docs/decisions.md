@@ -106,6 +106,57 @@ accent: it is the theme's accent, so the restraint survives whichever palette is
 in use. Every design draws its background through `chrome.ts` rather than naming
 colours, which is what makes this free instead of six chances to forget.
 
+### The pass draws its own frame, so every edge on it is derived from the content box
+
+`src/render/cards/pass.ts`
+
+The other five designs call `chrome.frame`, which is inset from the card's four
+edges. The `pass` frame cannot: it has to start where the coloured band ends, so
+this is the one design that draws its own — and once it was drawing its own, it
+started choosing its own coordinates. It ended up with three: a frame at 8, band
+type at 14 and the content at 20.
+
+**Every pair of those was symmetric about the card's own axis, and it still
+looked wrong.** The report was "the margins are asymmetric", which was the
+natural way to describe what it does to the eye: down the left edge you met a
+hairline, then the brand, then the first column, no two of them the same distance
+from the edge. Symmetry is not the property that was missing — agreement is.
+
+So the card now has one horizontal number. `layoutRow` turns it into a content
+box, the band's brand and login sit on that box's two edges, and the frame hangs
+exactly halfway between the box and the card on every side it has. The footer
+comes off the frame's own bottom edge rather than the card's, which is what stops
+"move the frame" from silently changing how much air the smallest type on the
+card has.
+
+Two details that are easy to get wrong the other way. The inset is taken from the
+**measured** content box and not from the margin that was requested: the card's
+width is rounded to a whole number, so the two differ by up to a quarter of a
+unit, and it is the measured gap the eye compares. And the box is rounded once,
+where it is built, because four coordinates that have to agree with each other
+cannot each round their own half of a card width.
+
+`test/layout.test.ts` asserts both properties over nine parameter combinations,
+by reading the coordinates back out of the rendered document. It fails on the
+geometry described above.
+
+### The service's name is a constant; the theme's is not
+
+`src/service.ts`
+
+The rename to `gstats` reached the landing page, the credit line and every
+document, and missed the `pass` band, which went on printing `PHOSPHOR STATS`
+onto every card drawn with that design for three commits — including the sample
+card in the README, which nothing re-renders. The name was a literal in each
+place that drew it, so there was nowhere to change it once.
+
+`SERVICE_NAME` is now that place, and a test in the per-design battery asserts
+that no design draws the old name. What deliberately does **not** come from it:
+the `phosphor` theme, the legacy hostname, and the repository's history. Those
+are all things somebody else has written down, and the URL contract puts them
+out of reach — which is the distinction the constant exists to make explicit
+rather than to blur.
+
 ### The vinyl label does not turn
 
 `src/render/cards/vinyl.ts`

@@ -96,6 +96,107 @@ describe('margin symmetry', () => {
   })
 })
 
+/**
+ * The same property, one level down.
+ *
+ * `layoutCard` is checked above by calling it. `pass` is the design that cannot
+ * be checked that way: its frame starts below the coloured band rather than at
+ * the card's top edge, so it is the one design that does not use
+ * `chrome.frame`, and what it draws has to be read back out of the document.
+ *
+ * The defect this pins had every pair symmetric about the card's own axis and
+ * still looked wrong. The frame was typed in at 8, the band's type at 14 and the
+ * content at 20, so the left edge showed three alignments with no two of them
+ * the same distance from the edge. Everything is now derived from the content box
+ * `layoutRow` measures: the type sits on its edges, and the frame exactly halfway
+ * between it and the card on every side the frame has.
+ */
+describe('pass margins', () => {
+  const BAND_HEIGHT = 26
+
+  function geometry(query: string) {
+    const svg = renderCard(statsFixture(), paramsFixture(`username=x&card=pass&${query}`))
+    const document = /^<svg [^>]*width="(\d+)" height="(\d+)"/.exec(svg)
+    const frame = /<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)" rx="2"/.exec(
+      svg,
+    )
+    if (document === null || frame === null) throw new Error(`nothing to measure in ${query}`)
+
+    const attribute = (match: RegExpMatchArray, index: number) => Number(match[index])
+    const x = attribute(frame, 1)
+    const y = attribute(frame, 2)
+
+    // Lines set from their start, and the one line set from its end. The stub is
+    // centred and belongs to neither. Picking them out by baseline rather than
+    // by the order they are written keeps the test measuring the card.
+    const lines = (pattern: RegExp) =>
+      [...svg.matchAll(pattern)].map((match) => ({ x: Number(match[1]), y: Number(match[2]) }))
+    const starts = lines(/<text x="([\d.]+)" y="([\d.]+)"(?![^>]*text-anchor)/g)
+    const ends = lines(/<text x="([\d.]+)" y="([\d.]+)"[^>]*text-anchor="end"/g)
+    const highest = (candidates: { x: number; y: number }[]) =>
+      candidates.reduce((best, line) => (line.y < best.y ? line : best)).x
+    const lowest = (candidates: { x: number; y: number }[]) =>
+      candidates.reduce((best, line) => (line.y > best.y ? line : best)).x
+
+    return {
+      width: attribute(document, 1),
+      height: attribute(document, 2),
+      frame: { left: x, right: x + attribute(frame, 3), top: y, bottom: y + attribute(frame, 4) },
+      /** The three lines that make up the card's left edge, top to bottom. */
+      leftEdge: [highest(starts), Math.min(...starts.map((line) => line.x)), lowest(starts)],
+      /** The login on the band, the only line hung from the right. */
+      login: highest(ends),
+    }
+  }
+
+  const cases: [string, string][] = [
+    ['everything shown', ''],
+    ['hide=total', 'hide=total'],
+    ['hide=best', 'hide=best'],
+    ['hide=langs', 'hide=langs'],
+    ['hide=total,best', 'hide=total,best'],
+    ['in Spanish', 'locale=es'],
+    ['eight languages', 'langs_count=8'],
+    ['square corners', 'radius=0'],
+    ['the roundest corners', 'radius=24'],
+  ]
+
+  for (const [name, query] of cases) {
+    it(`gives the type one edge a side, with ${name}`, () => {
+      const { width, leftEdge, login } = geometry(query)
+      const [brand, ...rest] = leftEdge
+
+      // The brand on the band, the first column under it and the date range at
+      // the bottom are one line, not three within a few units of each other.
+      for (const line of rest) {
+        expect(Math.abs(line - (brand ?? 0))).toBeLessThanOrEqual(TOLERANCE)
+      }
+      // The login ends as far from its edge as that line starts from this one.
+      expect(Math.abs(width - login - (brand ?? 0))).toBeLessThanOrEqual(TOLERANCE)
+    })
+
+    it(`hangs the frame midway between card and content, with ${name}`, () => {
+      const { width, height, frame, leftEdge } = geometry(query)
+      const content = leftEdge[0] ?? 0
+
+      // Symmetric across the card, and the same air on the three sides it has:
+      // the two edges, the bottom, and the band it starts under.
+      expect(Math.abs(frame.left - (width - frame.right))).toBeLessThanOrEqual(TOLERANCE)
+      expect(Math.abs(frame.left - (height - frame.bottom))).toBeLessThanOrEqual(TOLERANCE)
+      expect(Math.abs(frame.left - (frame.top - BAND_HEIGHT))).toBeLessThanOrEqual(TOLERANCE)
+
+      // Halfway: as far from the card's edge as it is from the first column.
+      expect(Math.abs(frame.left - (content - frame.left))).toBeLessThanOrEqual(TOLERANCE)
+    })
+  }
+
+  it('draws no frame at all when the border is switched off', () => {
+    const svg = renderCard(statsFixture(), paramsFixture('username=x&card=pass&border=none'))
+
+    expect(svg).not.toContain('rx="2"')
+  })
+})
+
 describe('containment', () => {
   it('keeps every language row inside the frame at the largest count', () => {
     const layout = layoutCard(THREE_COLUMNS, { lineCount: 8, width: 112.2 })
