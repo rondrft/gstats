@@ -116,6 +116,12 @@ PROFILE_RATE_LIMIT = "20"
 # percentage means something.
 KV_WRITE_BUDGET = "1000"
 
+# Which deploy target this is, reported at /health. The two Workers are
+# otherwise indistinguishable from the outside, which made the window after a
+# deploy — where one has the new SERVICE_VERSION and the other has not, and the
+# shared cache is split in two — impossible to observe. See docs/decisions.md.
+DEPLOY_TARGET = "primary"
+
 # Logins to keep permanently warm, comma separated, at most ten. Every fifteen
 # minutes each one is refetched and written back to KV, so nobody visiting those
 # profiles ever waits on GitHub and the stored figures are never more than a
@@ -193,3 +199,4 @@ CARD_MAX_AGE = "1800"
 API_RATE_LIMIT = "30"
 PROFILE_RATE_LIMIT = "20"
 KV_WRITE_BUDGET = "1000"
+DEPLOY_TARGET = "legacy"

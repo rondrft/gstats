@@ -47,6 +47,27 @@ describe('routing', () => {
   })
 
   /**
+   * The service runs as two Workers over one KV namespace, and they share cache
+   * entries only while they carry the same `SERVICE_VERSION`. A deploy updates
+   * them one after the other, so there is a window where they do not — and
+   * without a way to tell the two apart, both hostnames answer identically and
+   * that window cannot be observed at all. See docs/decisions.md.
+   */
+  it('says which deploy target answered, so the two can be compared', async () => {
+    const body = await (await get('/health')).json<{ target: string; version: string }>()
+
+    expect(body.target).toBe('primary')
+    expect(typeof body.version).toBe('string')
+
+    const legacy = await worker.fetch(new Request('https://stats.example.com/health'), {
+      ...testEnv,
+      DEPLOY_TARGET: 'legacy',
+    })
+
+    expect((await legacy.json<{ target: string }>()).target).toBe('legacy')
+  })
+
+  /**
    * An instance with no binding declared serves every request unthrottled.
    * That is a legitimate way to run a private one and a reckless way to run a
    * public one, so the absence is stated rather than left to be inferred.

@@ -85,6 +85,17 @@ export interface Env {
    * and reporting 0% for ever would make `/health` useless rather than calm.
    */
   KV_WRITE_BUDGET?: string
+  /**
+   * Which deploy target this is: `primary`, or `legacy` for the old hostname.
+   *
+   * The service runs as two Workers sharing one KV namespace, and they share
+   * cache entries only while they carry the same `SERVICE_VERSION` — it is part
+   * of the key. A deploy updates them one after the other, so there is a window
+   * in which they disagree and each pays its own misses out of one write budget.
+   * Until this existed, `/health` answered identically on both hostnames and
+   * there was no way to see that window at all.
+   */
+  DEPLOY_TARGET?: string
 }
 
 /** Used when nothing set a version, which in practice means local development. */
@@ -358,6 +369,11 @@ async function handleHealth(env: Env): Promise<Response> {
       // the symptoms are visible the cause is hours old.
       status: writes.warning ? 'warning' : 'ok',
       version: env.SERVICE_VERSION ?? UNKNOWN_VERSION,
+      // Which of the two Workers answered. Both serve the same code from the
+      // same cache, so without this their `/health` bodies are indistinguishable
+      // and "are they on the same build?" cannot be asked. See
+      // docs/decisions.md on the divergence window after a deploy.
+      target: env.DEPLOY_TARGET ?? 'primary',
       tokenConfigured: env.GITHUB_TOKEN !== undefined && env.GITHUB_TOKEN.length > 0,
       purgeEnabled: env.PURGE_TOKEN !== undefined && env.PURGE_TOKEN.length > 0,
       // An instance with no binding declared serves every request unthrottled.

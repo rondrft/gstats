@@ -776,6 +776,47 @@ Warming runs on the primary only. The cron is inherited by environments, so
 a second warmer would refresh the same entries at roughly a fifth of the free
 plan's daily writes.
 
+### Every deploy opens a window where the two Workers disagree
+
+`src/index.ts`, `/health`
+
+A deploy updates the two Workers one after the other, and each takes its own
+time to reach every colo. For a minute or two afterwards they can be running
+different commits — **and `SERVICE_VERSION` is part of the cache key**, so while
+that lasts the shared cache is not shared. Each Worker reads and writes its own
+namespace and pays its own misses, out of one KV write budget. Observed in
+production the first time this architecture was deployed: `gstats` reported
+`bcec7b3` while `phosphor-stats` still reported `d4ea76a`. It resolved itself in
+under two minutes.
+
+It is self-correcting and mostly harmless. It is worth writing down because the
+symptom — a burst of writes and upstream calls with no traffic to explain it — is
+one somebody will otherwise diagnose as a caching bug, three months from now,
+without ever suspecting that the two halves of the service briefly stopped
+agreeing on which cache to use.
+
+`/health` reports `target` alongside `version` for exactly this. Without it the
+two hostnames answered identically and the question could not even be asked:
+
+```bash
+for h in gstats phosphor-stats; do
+  curl -s "https://$h.rondrft.workers.dev/health" | jq -r '"\(.target)\t\(.version)"'
+done
+```
+
+Two identical versions means the window has closed. As a check that exits
+non-zero while they still differ, which is the form a deploy script wants:
+
+```bash
+diff <(curl -s https://gstats.rondrft.workers.dev/health          | jq -r .version) \
+     <(curl -s https://phosphor-stats.rondrft.workers.dev/health  | jq -r .version) \
+  && echo "converged"
+```
+
+Run it a minute *after* deploying, never in the same command — the same trap as
+propagation generally, and this project has been caught by that one more than
+once.
+
 ### The landing page is one self-contained document
 
 `src/landing.ts`
