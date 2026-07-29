@@ -211,13 +211,21 @@ export function landingPage(origin: string): string {
   .preview-card { display: flex; justify-content: center; }
   .preview-card img { max-width: 100%; height: auto; }
 
-  .snippet { position: relative; min-width: 0; padding: 0; }
-  /* Two lines that wrap. The URL is long, and horizontal scrolling inside a box
-     you are meant to copy out of is the worst of both. */
+  .snippet { min-width: 0; padding: 0; }
+  /* The copy button shared the top right corner with the text until the format
+     toggle needed somewhere to live. A row above the box holds both, which also
+     means the textarea no longer has to reserve a corner. */
+  .snippet-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: .4rem; padding: .5rem .5rem 0;
+  }
+  .formats { display: flex; gap: .4rem; }
+  .formats button.on { color: var(--bg); background: var(--accent); }
+  /* Lines that wrap. The URL is long, and horizontal scrolling inside a box you
+     are meant to copy out of is the worst of both. */
   textarea {
     display: block; width: 100%; resize: vertical;
-    /* Clear of the copy button, which floats over the top right corner. */
-    padding: .7rem 4.5rem .7rem .8rem;
+    padding: .5rem .8rem .7rem;
     background: transparent; color: var(--text);
     border: 0; border-radius: var(--radius);
     font-family: var(--mono); font-size: 12px; line-height: 1.5;
@@ -231,7 +239,6 @@ export function landingPage(origin: string): string {
     padding: .2rem .6rem; font-family: var(--mono); font-size: 11px; cursor: pointer;
   }
   button:hover { background: var(--accent); color: var(--bg); }
-  .snippet button { position: absolute; top: .5rem; right: .5rem; }
 
   .reference { padding: 0; overflow: hidden; }
   .reference table { width: 100%; border-collapse: collapse; font-size: 11.5px; }
@@ -363,8 +370,17 @@ ${THEME_NAMES.map((name) => `          <option value="${name}">${name}</option>`
         <img id="preview" src="/api?username=${DEMO_USER}" alt="Live preview">
       </div>
       <div class="panel snippet">
-        <button id="copy" type="button">copy</button>
-        <textarea id="markdown" rows="2" readonly spellcheck="false"></textarea>
+        <div class="snippet-bar">
+          <!-- HTML first because it is the one that gives the card a link. The
+               plain markdown form is one click away for anybody who wants the
+               image and nothing around it. -->
+          <div class="formats" id="formats">
+            <button type="button" data-format="html" class="on">html</button>
+            <button type="button" data-format="markdown">markdown</button>
+          </div>
+          <button id="copy" type="button">copy</button>
+        </div>
+        <textarea id="snippet" rows="3" readonly spellcheck="false"></textarea>
       </div>
       <div class="panel reference">
         <table>
@@ -419,10 +435,16 @@ ${THEME_NAMES.map(
 <script>
 (function () {
   var origin = ${JSON.stringify(origin)};
+  var repo = ${JSON.stringify(REPO_URL)};
   var form = document.getElementById('controls');
   var preview = document.getElementById('preview');
-  var markdown = document.getElementById('markdown');
+  var snippet = document.getElementById('snippet');
+  var formats = document.getElementById('formats');
   var copy = document.getElementById('copy');
+
+  // Which of the two forms the box is showing. HTML is the default because it is
+  // the one that carries a link; markdown is the same card with nothing round it.
+  var format = 'html';
 
   // Defaults are omitted from the generated URL: a snippet full of redundant
   // parameters is harder to read and harder to hand-edit later.
@@ -466,13 +488,37 @@ ${THEME_NAMES.map(
     return '/api?' + params.join('&');
   }
 
+  /**
+   * Nothing here is written into this page — the snippet is text in a textarea —
+   * but the username is whatever somebody typed, and it lands inside an HTML
+   * attribute in what they are about to paste into their own README. A stray
+   * quote there would hand them a broken snippet.
+   */
+  function attribute(text) {
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/"/g, '&quot;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function snippetFor(url, username) {
+    var alt = username + "'s GitHub stats";
+    if (format === 'markdown') return '![' + alt + '](' + url + ')';
+
+    // The ampersands between parameters have to be escaped for the attribute to
+    // be valid HTML; GitHub decodes them before it fetches the card, so the two
+    // forms render the same image.
+    return (
+      '<a href="' + repo + '"><img alt="' + attribute(alt) + '" src="' + attribute(url) + '" /></a>'
+    );
+  }
+
   function render() {
     var path = build();
     preview.src = path;
-    var absolute = origin + path;
     var username = value('username').trim() || '${DEMO_USER}';
-    markdown.value =
-      '[![' + username + "'s GitHub stats](" + absolute + ')](https://github.com/' + username + ')';
+    snippet.value = snippetFor(origin + path, username);
   }
 
   // Repaint the colour pickers from the theme, so an override is always
@@ -538,8 +584,18 @@ ${THEME_NAMES.map(
 
   document.getElementById('username').addEventListener('change', repaintGallery);
 
+  formats.addEventListener('click', function (event) {
+    var button = event.target.closest('[data-format]');
+    if (!button) return;
+    format = button.getAttribute('data-format');
+    formats.querySelectorAll('button').forEach(function (other) {
+      other.classList.toggle('on', other === button);
+    });
+    render();
+  });
+
   copy.addEventListener('click', function () {
-    navigator.clipboard.writeText(markdown.value).then(function () {
+    navigator.clipboard.writeText(snippet.value).then(function () {
       copy.textContent = 'copied';
       setTimeout(function () { copy.textContent = 'copy'; }, 1400);
     });

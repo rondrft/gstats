@@ -12,12 +12,24 @@ GitHub stats cards for your README. Contributions, streaks and languages, render
 
 ![A gstats card](docs/assets/terminal.svg)
 
-```markdown
-![My GitHub stats](https://gstats.rondrft.workers.dev/api?username=USERNAME)
+```html
+<a href="https://github.com/rondrft/gstats"><img alt="My GitHub stats" src="https://gstats.rondrft.workers.dev/api?username=USERNAME" /></a>
 ```
 
 That is the whole thing. Replace `USERNAME`, paste it in — no account to connect,
 no permission to grant, nothing to authorise. Only public data is used.
+
+**The link around the card is optional.** It points here, and removing it changes
+nothing: not the card, not the parameters, not how it is cached, and nothing on
+this service looks for it. The plain form works exactly as well —
+
+```markdown
+![My GitHub stats](https://gstats.rondrft.workers.dev/api?username=USERNAME)
+```
+
+— and GitHub renders the identical image from either, because it rewrites the
+`src` through its own image proxy in both cases. The only difference is where a
+click goes: with the link, here; without it, to the image on its own.
 
 > **Already using `phosphor-stats.rondrft.workers.dev`?** It still works, and it
 > is not going to stop. The service answers on both hostnames from the same
@@ -44,8 +56,8 @@ The default, in the phosphor palette this project was originally named for.
 
 ![terminal design](docs/assets/terminal.svg)
 
-```markdown
-![](https://gstats.rondrft.workers.dev/api?username=USERNAME)
+```html
+<a href="https://github.com/rondrft/gstats"><img alt="My GitHub stats" src="https://gstats.rondrft.workers.dev/api?username=USERNAME" /></a>
 ```
 
 ### `heatmap` — the trailing year, day by day
@@ -55,8 +67,8 @@ against your own distribution, so a quiet year and a busy one both get contrast.
 
 ![heatmap design](docs/assets/heatmap.svg)
 
-```markdown
-![](https://gstats.rondrft.workers.dev/api?username=USERNAME&card=heatmap&theme=ice)
+```html
+<a href="https://github.com/rondrft/gstats"><img alt="My GitHub stats" src="https://gstats.rondrft.workers.dev/api?username=USERNAME&amp;card=heatmap&amp;theme=ice" /></a>
 ```
 
 ### `press` — a newspaper front page
@@ -65,8 +77,8 @@ Serif, on paper, with the current streak as the one spot of ink colour.
 
 ![press design](docs/assets/press.svg)
 
-```markdown
-![](https://gstats.rondrft.workers.dev/api?username=USERNAME&card=press&theme=light)
+```html
+<a href="https://github.com/rondrft/gstats"><img alt="My GitHub stats" src="https://gstats.rondrft.workers.dev/api?username=USERNAME&amp;card=press&amp;theme=light" /></a>
 ```
 
 ### `gauge` — an instrument panel
@@ -76,8 +88,8 @@ own record, so full deflection means a personal best in progress.
 
 ![gauge design](docs/assets/gauge.svg)
 
-```markdown
-![](https://gstats.rondrft.workers.dev/api?username=USERNAME&card=gauge&theme=mono)
+```html
+<a href="https://github.com/rondrft/gstats"><img alt="My GitHub stats" src="https://gstats.rondrft.workers.dev/api?username=USERNAME&amp;card=gauge&amp;theme=mono" /></a>
 ```
 
 ### `vinyl` — a record and its tracklist
@@ -86,8 +98,8 @@ Turns, once every eight seconds. `&animate=false` stops it.
 
 ![vinyl design](docs/assets/vinyl.svg)
 
-```markdown
-![](https://gstats.rondrft.workers.dev/api?username=USERNAME&card=vinyl&theme=amber)
+```html
+<a href="https://github.com/rondrft/gstats"><img alt="My GitHub stats" src="https://gstats.rondrft.workers.dev/api?username=USERNAME&amp;card=vinyl&amp;theme=amber" /></a>
 ```
 
 ### `pass` — a boarding pass
@@ -97,8 +109,8 @@ them, so you are not limited to the five presets.
 
 ![pass design](docs/assets/pass.svg)
 
-```markdown
-![](https://gstats.rondrft.workers.dev/api?username=USERNAME&card=pass&bg=F4EDE1&accent=C1432B&text=2B2118&muted=7A6A57&border=D6C6AC)
+```html
+<a href="https://github.com/rondrft/gstats"><img alt="My GitHub stats" src="https://gstats.rondrft.workers.dev/api?username=USERNAME&amp;card=pass&amp;bg=F4EDE1&amp;accent=C1432B&amp;text=2B2118&amp;muted=7A6A57&amp;border=D6C6AC" /></a>
 ```
 
 ### Themes

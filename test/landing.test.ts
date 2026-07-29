@@ -92,6 +92,43 @@ describe('landing page', () => {
     expect(script).toContain('data-theme')
   })
 
+  /**
+   * The snippet is the one thing on this page that ends up in somebody else's
+   * README, so both forms are pinned. HTML is offered first because it is the one
+   * that gives the card a link; markdown is the same card with nothing round it,
+   * which is also the answer to "what if I do not want the link".
+   */
+  it('offers both snippet forms, with the linked one first', () => {
+    expect(page).toContain('data-format="html" class="on"')
+    expect(page).toContain('data-format="markdown"')
+    expect(script).toContain("var format = 'html'")
+
+    expect(script).toContain(`'<a href="' + repo + '"><img alt="'`)
+    expect(script).toContain(`return '![' + alt + '](' + url + ')'`)
+  })
+
+  /**
+   * Both forms are built from the one URL the controls produced, so `hide`, the
+   * colour overrides and everything else are in the snippet whichever is showing.
+   */
+  it('builds both forms from the URL the controls produced', () => {
+    expect(script).toContain('snippet.value = snippetFor(origin + path, username)')
+    expect(script).toContain('navigator.clipboard.writeText(snippet.value)')
+  })
+
+  /**
+   * The username is whatever somebody typed and it lands inside an attribute in
+   * what they are about to paste. Nothing is injected into this page, so this is
+   * about handing over a snippet that is well formed rather than about XSS here.
+   */
+  it('escapes what it writes into an HTML attribute', () => {
+    for (const rule of [`replace(/&/g, '&amp;')`, `replace(/"/g, '&quot;')`]) {
+      expect(script).toContain(rule)
+    }
+    expect(script).toContain('attribute(alt)')
+    expect(script).toContain('attribute(url)')
+  })
+
   it('leaves defaults out of the generated snippet', () => {
     // A snippet full of redundant parameters is harder to read and to hand-edit.
     expect(script).toContain("if (value('card') !== 'terminal')")
@@ -159,19 +196,20 @@ describe('visual structure', () => {
 
   /**
    * The snippet was a single scrolling line with the copy button sitting on top
-   * of the text. A long URL is the normal case here, not the exception.
+   * of the text. A long URL is the normal case here, not the exception — and the
+   * HTML form is longer than the markdown one it replaced, so it needs the room.
    */
-  it('wraps the snippet instead of scrolling it, clear of the copy button', () => {
+  it('wraps the snippet instead of scrolling it', () => {
     const stylesheet = /<style>([\s\S]*?)<\/style>/.exec(page)?.[1] ?? ''
 
-    expect(page).toMatch(/<textarea id="markdown"[^>]*rows="2"/)
+    expect(page).toMatch(/<textarea id="snippet"[^>]*rows="3"/)
     expect(stylesheet).toContain('white-space: pre-wrap')
 
-    const padding = /padding:\s*[\d.]+rem\s+([\d.]+)rem/.exec(
-      /textarea \{([\s\S]*?)\}/.exec(stylesheet)?.[1] ?? '',
-    )
-    // Wider than the button, which is absolutely positioned over that corner.
-    expect(Number(padding?.[1] ?? 0)).toBeGreaterThan(3)
+    // The copy button used to float over the box's top right corner, which is
+    // why the text reserved four and a half rem of it. It sits in a row of its
+    // own now, with the format toggle, so nothing overlaps the text.
+    expect(stylesheet).toContain('.snippet-bar {')
+    expect(stylesheet).not.toContain('.snippet button { position: absolute')
   })
 
   it('fills the column beside the controls with a reference table', () => {

@@ -905,6 +905,28 @@ file match what this code draws? Two figures on it are chosen rather than
 captured — the calendar and the year totals the `gauge` needles measure — because
 no card prints them and they cannot be recovered from rendered output.
 
+### The default snippet wraps the card in a link, and the plain one is one click away
+
+`src/landing.ts`, `README.md`
+
+The generator hands over HTML with the card inside an `<a>` to this project, and
+offers the plain markdown image beside it. Three things were checked rather than
+assumed, through GitHub's own markdown API:
+
+- `<a href>` and `<img alt src>` both survive the README sanitizer, with the href
+  intact.
+- The rendered `<img>` is **identical** either way — same Camo URL, same `alt`,
+  same `max-width` — so the card looks the same and is cached the same.
+- A plain markdown image is *already* wrapped in a link by GitHub, to the Camo
+  copy of the image. So the choice is not "link or no link", it is where the click
+  goes.
+
+The link is documented as optional in the README, and nothing in the service looks
+for it: no referrer check, no parameter, no difference in what is served. That
+matters more than it sounds — a snippet people paste into their own README has to
+be honest about what it is doing, and the markdown form is kept precisely so that
+"I do not want that link" has a first-class answer instead of a hand edit.
+
 ### The landing page is one self-contained document
 
 `src/landing.ts`
