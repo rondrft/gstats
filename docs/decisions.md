@@ -799,19 +799,25 @@ agreeing on which cache to use.
 two hostnames answered identically and the question could not even be asked:
 
 ```bash
+want=$(git rev-parse --short HEAD)
 for h in gstats phosphor-stats; do
-  curl -s "https://$h.rondrft.workers.dev/health" | jq -r '"\(.target)\t\(.version)"'
+  curl -s "https://$h.rondrft.workers.dev/health" \
+    | jq -r --arg want "$want" '"\(.target)\t\(.version)\t\(if .version == $want then "ok" else "STALE" end)"'
 done
 ```
 
-Two identical versions means the window has closed. As a check that exits
-non-zero while they still differ, which is the form a deploy script wants:
+**Comparing the two against each other is not enough, and that is worth being
+precise about because the obvious check gets it wrong.** This
 
 ```bash
-diff <(curl -s https://gstats.rondrft.workers.dev/health          | jq -r .version) \
-     <(curl -s https://phosphor-stats.rondrft.workers.dev/health  | jq -r .version) \
-  && echo "converged"
+diff <(curl -s https://gstats…/health | jq -r .version) \
+     <(curl -s https://phosphor-stats…/health | jq -r .version)
 ```
+
+passes whenever they agree — including when they agree on the *previous* commit
+because neither has propagated yet. It was written that way here first, and it
+reported "converged" against a build two commits old. The version has to be
+compared against the commit that was deployed, which is what `$want` is for.
 
 Run it a minute *after* deploying, never in the same command — the same trap as
 propagation generally, and this project has been caught by that one more than
