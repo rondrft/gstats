@@ -27,6 +27,18 @@ Committed but not yet deployed.
 
 ### Added
 
+- **The snippet the landing page hands over is HTML, with the card wrapped in a
+  link to the project.** The plain markdown image is a click away beside it, and
+  both are built from the same URL, so anything you set in the controls is in
+  either. **The link is optional and nothing depends on it** — no referrer check,
+  no parameter, no difference in what is served. Checked against GitHub's own
+  markdown renderer: the sanitizer keeps the anchor, and the image it produces is
+  identical to the markdown one down to the proxy URL, so a card looks and caches
+  the same either way. `4611229`
+- The six sample cards in the README are file snapshots now: `pnpm test` fails
+  when they are behind the renderer and `pnpm samples` writes them back. They had
+  drifted three commits, which is where a bug report about two already-fixed
+  defects came from. `a885fb1`
 - **The service answers on `gstats.rondrft.workers.dev`**, which is the hostname
   new snippets use. `phosphor-stats.rondrft.workers.dev` keeps working
   indefinitely: it is a second deploy of the identical Worker from the same
@@ -86,6 +98,11 @@ Committed but not yet deployed.
   that had it as a literal, so every card drawn with that design carried the old
   name for three commits. There is one constant for it now, and a test that fails
   if any design draws the old one. `2b1d85a`
+- `card=press` drew its masthead rules and its dateline from the margin constant
+  rather than from the layout's content box, which put them two tenths of a unit
+  out of line with the columns beneath them. Invisible, and the same latent
+  mistake that was visible on `pass`. Its frame keeps the inset it has always had.
+  `dd31f25`
 - The sample card in the README (`docs/assets/pass.svg`) was three commits stale:
   it showed the notch dot and the cramped stub that `e7c4ca0` fixed, and the old
   name. Re-rendered from the same profile the other five were captured from.
