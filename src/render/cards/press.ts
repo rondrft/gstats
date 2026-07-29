@@ -24,6 +24,9 @@ import type { CardRenderer, RenderOptions } from './registry'
 
 const MARGIN = 22
 
+/** Space between adjacent columns. The dividing hairlines go down its middle. */
+const GAP = 26
+
 const HEADLINE_SIZE = 24
 const DATELINE_SIZE = 9
 const VALUE_SIZE = 32
@@ -68,11 +71,17 @@ function renderPress(data: CardData, { params, strings }: RenderOptions): string
 
   const blocks = showLangs ? [...columns, { width: langWidth, height: COLUMN_HEIGHT }] : columns
 
-  const row = layoutRow(blocks, { gap: 26, margin: MARGIN, height: HEIGHT })
+  const row = layoutRow(blocks, { gap: GAP, margin: MARGIN, height: HEIGHT })
   const headline = truncate(data.name ?? data.login, HEADLINE_MAX)
 
   const markup =
     plate(row.width, HEIGHT, style) +
+    // The inset is this design's own proportion and stays where it is: a
+    // masthead wants more air outside its rules than the frame would leave at
+    // the shared 12, and moving a published card's frame is a visible change to
+    // something somebody has already embedded. It is an argument to the shared
+    // frame rather than a coordinate written down twice, which is the thing that
+    // went wrong on `pass`.
     frame(row.width, HEIGHT, style, 8) +
     text(headline, {
       x: row.width / 2,
@@ -82,8 +91,8 @@ function renderPress(data: CardData, { params, strings }: RenderOptions): string
       anchor: 'middle',
       family: SERIF_STACK,
     }) +
-    doubleRule(row.width, style.muted) +
-    dateline(data, row.width, style) +
+    doubleRule(row.content, style.muted) +
+    dateline(data, row.content, style) +
     divisions(row, blocks.length, style.muted) +
     stats
       .map((stat, index) => statColumn(stat, row.x[index] ?? 0, blocks[index]?.width ?? 0, style))
@@ -104,26 +113,42 @@ function renderPress(data: CardData, { params, strings }: RenderOptions): string
   )
 }
 
-/** Two rules, one heavy and one hair, which is what a masthead does. */
-function doubleRule(width: number, stroke: string): string {
+/**
+ * Two rules, one heavy and one hair, which is what a masthead does.
+ *
+ * They run between the content's own edges rather than between two copies of
+ * `MARGIN`. The card's width is rounded to a whole number, so the content lands
+ * within half a unit of the margin it asked for and not on it — a rule written
+ * from the constant is very slightly out of line with the column beneath it. It
+ * is far below anything anybody can see, and it is the same mistake that was
+ * visible on `pass`: a coordinate that has to agree with the layout, written
+ * down somewhere the layout cannot reach.
+ */
+function doubleRule(content: { left: number; right: number }, stroke: string): string {
+  const x = round(content.left)
+  const width = round(content.right - content.left)
   return (
-    `<rect x="${MARGIN}" y="${RULE_Y}" width="${round(width - MARGIN * 2)}" height="1.6" fill="${stroke}"/>` +
-    `<rect x="${MARGIN}" y="${RULE_Y + 4}" width="${round(width - MARGIN * 2)}" height="0.5" fill="${stroke}" opacity="0.7"/>`
+    `<rect x="${x}" y="${RULE_Y}" width="${width}" height="1.6" fill="${stroke}"/>` +
+    `<rect x="${x}" y="${RULE_Y + 4}" width="${width}" height="0.5" fill="${stroke}" opacity="0.7"/>`
   )
 }
 
-function dateline(data: CardData, width: number, style: { muted: string; locale: string }): string {
+function dateline(
+  data: CardData,
+  content: { left: number; right: number },
+  style: { muted: string; locale: string },
+): string {
   const printed = new Date(data.fetchedAt).toISOString().slice(0, 10)
   return (
     text(data.login, {
-      x: MARGIN,
+      x: content.left,
       y: DATELINE_BASELINE,
       size: DATELINE_SIZE,
       fill: style.muted,
       letterSpacing: 1.2,
     }) +
     text(printed, {
-      x: width - MARGIN,
+      x: content.right,
       y: DATELINE_BASELINE,
       size: DATELINE_SIZE,
       fill: style.muted,
@@ -133,11 +158,11 @@ function dateline(data: CardData, width: number, style: { muted: string; locale:
   )
 }
 
-/** Hairlines in the gutters, never at the outer edges. */
+/** Hairlines down the middle of each gutter, never at the outer edges. */
 function divisions(row: { x: number[]; width: number }, count: number, stroke: string): string {
   const rules: string[] = []
   for (let index = 1; index < count; index += 1) {
-    const x = round((row.x[index] ?? 0) - 13)
+    const x = round((row.x[index] ?? 0) - GAP / 2)
     rules.push(
       `<line x1="${x}" y1="${COLUMN_TOP - 6}" x2="${x}" y2="${COLUMN_TOP + COLUMN_HEIGHT - 6}" ` +
         `stroke="${stroke}" stroke-width="0.5" opacity="0.6"/>`,
