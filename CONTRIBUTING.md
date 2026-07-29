@@ -27,6 +27,17 @@ pnpm test
 
 `pnpm format` applies the formatter and the safe lint fixes.
 
+If you changed anything a card draws, also run
+
+```bash
+pnpm samples
+```
+
+which re-renders the six sample cards in `docs/assets/` — the ones the README
+shows. They are file snapshots, so `pnpm test` fails when they are behind the
+renderer; this is the command that writes them back. Commit what it changes, and
+look at the images before you do.
+
 ## How the code is laid out
 
 ```
@@ -143,6 +154,19 @@ free too. `test/cards.test.ts` runs the same battery over every registered id �
 theme, locale, hide, `animate=false`, escaping, empty accounts, six-digit
 numbers, size budget — so a new entry in the registry is a new set of tests
 without writing any.
+
+Two of those obligations are easy to meet by accident and easy to miss for the
+same reason. Read `row.content` for anything you draw outside the blocks — a
+rule, a header, a frame of your own — rather than writing the margin down a
+second time; the card's width is rounded, so the content lands *near* the margin
+you asked for and not on it, and two coordinates that have to agree will not.
+And every module has to disappear under `hide`, including `langs` when your
+design shows it somewhere that is not a layout block, which is where `pass` was
+still printing it.
+
+`test/samples.test.ts` also expects a sample for the new id: add the query it
+should be drawn with, run `pnpm samples`, and put the card and its snippet in the
+README beside the others.
 
 ## Adding a theme
 

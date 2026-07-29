@@ -874,6 +874,37 @@ Run it a minute *after* deploying, never in the same command — the same trap a
 propagation generally, and this project has been caught by that one more than
 once.
 
+### The sample cards are file snapshots, checked against the renderer and not against production
+
+`test/samples.test.ts`, `docs/assets/`
+
+The six cards in the README are rendered output committed as files. Nothing
+regenerated them, so `pass.svg` sat three commits behind the code — showing a
+notch painted on the accent band and a cramped stub, both already fixed — and an
+external report arrived about two defects that were closed. **The most-read
+output this service has was the only output nothing checked.**
+
+They are now file snapshots: `pnpm test` compares each one against what the
+renderer draws and fails on any difference, `pnpm samples` writes them back, and
+a seventh design fails the suite until it has a sample.
+
+**Fetching them from the deployed instance was the obvious mechanism and is the
+wrong one for the assertion.** Everything on a live card moves: the figures daily,
+the date `press` prints, and the heatmap's element count with every day that
+becomes active. A byte comparison against production would fail every morning for
+reasons outside this repository, and a check that cries wolf is one people re-run
+without reading. It would also be **green on the failure it exists to catch** — a
+stale committed asset and a stale deploy agree with each other, which is the same
+reason `/health` has to be compared against the commit that was deployed rather
+than against the other Worker.
+
+So the profile is a snapshot of the live instance taken by hand and frozen in the
+fixture. The figures stay plausible and the six stay consistent with each other,
+while the assertion is the only one a test can honestly make: does the committed
+file match what this code draws? Two figures on it are chosen rather than
+captured — the calendar and the year totals the `gauge` needles measure — because
+no card prints them and they cannot be recovered from rendered output.
+
 ### The landing page is one self-contained document
 
 `src/landing.ts`

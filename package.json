@@ -18,6 +18,7 @@
     "lint": "biome check .",
     "format": "biome check --write .",
     "test": "vitest run",
+    "samples": "vitest run test/samples.test.ts -u",
     "test:watch": "vitest"
   },
   "devDependencies": {
