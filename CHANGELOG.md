@@ -49,11 +49,16 @@ Committed but not yet deployed.
   up to twelve further hours to appear. **This can change the current streak a
   card shows by one, in the direction of showing more.** `1e20bba`
 - **The project is called `gstats`.** The repository, both Workers and the
-  branding follow the name; `show_credit=true` now draws `gstats` on the card
-  instead of `phosphor-stats`. That is the only rendered output the rename
-  touches, and it is opt-in with a default of `false`. **The `phosphor` theme is
+  branding follow the name; `show_credit=true` draws `gstats` on the card instead
+  of `phosphor-stats`, and so does the band on `card=pass`, which the rename
+  missed the first time — see "Fixed" below. **The `phosphor` theme is
   unchanged** — that one is a public parameter value sitting in other people's
   READMEs, and renaming it would break them.
+- The icons at `/favicon.svg` and `/logo.svg` give `gstats` as their accessible
+  name, which is the only text in either file. Nothing about them looks different.
+  They are served with a year and `immutable`, so a browser that already holds one
+  keeps the old name until it expires — acceptable for a label no sighted reader
+  sees, and cheaper than moving two public URLs. `2b1d85a`
 - The four language parameters — `lang_mode`, `langs_count`, `exclude_langs`,
   `include_langs` — no longer cost a separate fetch from GitHub. They rank data
   that has already been fetched, so they now behave the way `theme` always has.
@@ -67,6 +72,23 @@ Committed but not yet deployed.
 - `card=pass` painted the top perforation notch onto its own accent band, where
   it read as a dot rather than as a hole, and its stub was cramped against the
   card edge. `e7c4ca0`
+- **`card=pass` had three left margins.** Its inner frame, the type on its
+  coloured band and its columns each sat a different distance from the card edge,
+  which reads as a card whose margins are wrong even though each pair was
+  symmetric. Every edge on it now comes from the layout's content box, so the
+  brand stands over the first column and the frame hangs midway between the
+  content and the card. **The type on this design moves by a few units**, which is
+  visible if you compare a card drawn before and after. `2b1d85a`
+- **`card=pass` printed its language summary even under `hide=langs`**, and on a
+  card narrowed by another hidden module it overlapped the date range. `2b1d85a`
+- **The band on `card=pass` still said `PHOSPHOR STATS`.** The rename reached the
+  credit line, the landing page and the documentation and missed the one place
+  that had it as a literal, so every card drawn with that design carried the old
+  name for three commits. There is one constant for it now, and a test that fails
+  if any design draws the old one. `2b1d85a`
+- The sample card in the README (`docs/assets/pass.svg`) was three commits stale:
+  it showed the notch dot and the cramped stub that `e7c4ca0` fixed, and the old
+  name. Re-rendered from the same profile the other five were captured from.
 
 ## 2026-07-27
 

@@ -253,7 +253,7 @@ About five minutes, and it fits inside the Cloudflare free tier.
 
 ```bash
 git clone https://github.com/rondrft/gstats
-cd phosphor-stats && pnpm install
+cd gstats && pnpm install
 pnpm wrangler kv namespace create STATS_CACHE   # paste the id into wrangler.toml
 pnpm wrangler secret put GITHUB_TOKEN
 pnpm deploy

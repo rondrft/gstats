@@ -8,8 +8,8 @@ write-budget figure at `/health`, stale-while-error, the language bars that did
 not scale with their percentage, the ring track that made a third look like four
 fifths on light themes, the quota reading that was written on every cache miss —
 and then sampled, and now not written at all unless it is bad news — the streak's
-day boundary moving from UTC to Anywhere on Earth, and the language parameters
-leaving the cache key.
+day boundary moving from UTC to Anywhere on Earth, the language parameters
+leaving the cache key, and the `pass` design's three disagreeing margins.
 
 ---
 
@@ -113,3 +113,26 @@ wrong place.
 Worth knowing for whoever adds the seventh design: the useful check is a real
 README, and the useful moment is before it is published rather than after
 somebody opens an issue.
+
+## 6. Nothing re-renders the sample cards in `docs/assets/`
+
+The six SVGs the README shows are rendered output committed as files, and nothing
+regenerates them. `docs/assets/pass.svg` was three commits stale: it showed the
+perforation notch as a dot on the accent band and a stub cramped against the card
+edge, both fixed in `e7c4ca0`, and it went on printing the old service name after
+the rename. **Every reader of the front page was looking at defects the code no
+longer had** — including the reader who reported the margins, which is how the
+already-closed items came back.
+
+A script that re-renders all six from one fixture would close it, and the reason
+this is low and not high: the figures on them come from a real profile, so a
+regeneration either freezes those figures in the fixture — which is what a sample
+card wants, and what happened here — or makes the six disagree with each other
+about how many contributions the same person has.
+
+`assets/brand/social-preview.png` is the same class of thing and is not fixed: it
+is a 1280×640 raster, drawn by hand, that still says `phosphor-stats` and quotes
+the old hostname. It is what `og:image` points at, so it is what a shared link
+shows. Replacing it needs the image redrawn *and* uploaded by hand in the
+repository settings, because GitHub keeps its own copy of the social preview —
+neither half is something a test can do.
