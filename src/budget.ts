@@ -3,9 +3,13 @@
  *
  * `docs/limits.md` explains why this is the number that matters: the free plan
  * allows a thousand writes a day, the GitHub quota it is usually confused with
- * is forty-five times further away, and running out of writes triggers a
+ * is about seven times further away, and running out of writes triggers a
  * cascade rather than a gradual slowdown — nothing gets cached, so every request
  * becomes a miss, so the GitHub quota drains in minutes too.
+ *
+ * Seven and not the forty-five this comment used to claim. GitHub's allowance is
+ * hourly, and turning it into a daily one assumed a flat rate that a deploy —
+ * which retires every cache entry at once — comprehensively breaks.
  *
  * Until this existed there was no way to see that coming. `/health` now reports
  * the figure and turns `status` to `warning` before it is too late to act.

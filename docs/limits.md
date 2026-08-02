@@ -2,8 +2,13 @@
 
 Short version: **the ceiling is Cloudflare KV writes, not the GitHub quota.**
 That is the opposite of what the design reads like — the GitHub budget is the
-thing every comment worries about, and it is nowhere near being the constraint.
-Worth knowing before optimising the wrong number.
+thing every comment worries about, and it is not the constraint. Worth knowing
+before optimising the wrong number.
+
+It is not, however, as far from being the constraint as this file used to say.
+The margin is about **seven times, not forty-five**; the correction is
+[below](#which-makes-the-gap-between-the-two-ceilings-about-seven-times-not-forty-five)
+and it comes from GitHub's allowance being hourly rather than daily.
 
 All figures below are derived from the code, not estimated: KV freshness is
 `KV_FRESH_SECONDS` in `src/cache.ts`, and the write count per miss is whatever
@@ -78,9 +83,10 @@ every other Worker on the same account, so the real allowance is lower.
 
 The `4.06` is the four cache misses a profile costs plus its share of the
 request counter, at an assumed dozen requests per profile per day. That
-assumption is now the only estimate in this document, and it does not have to
-stay one: `/health` reports the requests actually served, so a given instance
-can substitute its own figure —
+assumption is one of the two estimates in this document — the other is how
+tightly the post-deploy stampede lands, below — and it does not have to stay
+one: `/health` reports the requests actually served, so a given instance can
+substitute its own figure —
 
 ```
 writes/day  ≈  (4 × profiles  +  requests/day ÷ 200  +  4) × 26/25
@@ -95,20 +101,85 @@ whole apparatus costs about fourteen profiles of headroom and buys knowing where
 on the scale you are, which is a trade this document exists to argue for — the
 alternative is finding out from a card going stale.
 
-**GitHub GraphQL: 5,000 points per hour = 120,000 per day**, per token.
+**GitHub GraphQL: 5,000 points per hour**, per token.
+
+Per *hour*, and that is the whole of the correction below. This document used to
+turn it into 120,000 a day and divide:
 
 ```
 120,000 points/day ÷ ~15 points/profile/day  ≈  8,000 active profiles
 ```
 
-The GitHub ceiling is roughly **forty-five times** further away than the KV one. Every
-mechanism in this codebase that protects the GitHub quota — the six-hour
-freshness, the language pagination cap, the aliased year batching, the stale
-fallback — is protecting the resource that was never going to run out first.
+**That figure was optimistic by roughly a factor of six, and it is worth being
+precise about why, because the mistake is not arithmetic.** Converting an hourly
+allowance into a daily one assumes consumption is flat across the day. Nothing
+here is flat, and one thing is violently not.
 
-They are still worth having: they are what keeps the GitHub ceiling that far
-away, and a token is also a per-instance limit rather than a per-account one. But
-if a number needs watching, it is the writes.
+### The deploy stampede is what actually binds
+
+`SERVICE_VERSION` is part of the cache key, so **every deploy retires every
+entry**. The first request for each active profile after a release is a miss,
+and a miss is three to five queries. That is not spread across a day; it lands
+in however long the instance's readers take to come back, and a card is served
+with `max-age=1800`, so a card on a page anybody is looking at comes back inside
+half an hour.
+
+```
+steady state    0.6 × N points/hour        (15 points/profile/day ÷ 24)
+after a deploy  + up to 4 × N points, inside one hour
+                4.6 × N  ≤  5,000   →   N ≈ 1,100 active profiles
+```
+
+If the returns spread over six hours instead of one — the loosest reading of
+"active", which only guarantees a reader every six hours — the same arithmetic
+gives about 3,900. A ceiling is quoted against the worse case, so:
+
+**The GitHub ceiling is about 1,100 active profiles, not 8,000**, and what puts
+it there is a deploy rather than the traffic.
+
+### Which makes the gap between the two ceilings about seven times, not forty-five
+
+The old **forty-five** was internally consistent when it was written — 8,000
+against a KV ceiling of ~178 — and both halves have moved since. Comparing like
+with like, both figures on a day with a release:
+
+| | Active profiles |
+| --- | --- |
+| KV writes, the day of a deploy | **~150** |
+| GitHub points, the hour of that deploy | **~1,100** |
+
+Writes still bind first, and every conclusion in this document still holds. But
+the margin is **seven times, not forty-five**, and that is a materially different
+picture from the one this file used to paint: it means the GitHub quota is a
+constraint on the horizon rather than one over it, and that on the paid plan —
+where the write ceiling jumps three orders of magnitude — GitHub becomes the
+binding constraint at about 1,100 profiles rather than at 8,000.
+
+Every mechanism in here that protects the GitHub quota — the six-hour freshness,
+the language pagination cap, the aliased year batching, the stale fallback — is
+still protecting the resource that runs out second. They are what keep it
+second. But "forty-five times of headroom" was never a licence to stop counting,
+and it is not one now.
+
+### The stampede is a choice, and this is what it costs
+
+Worth stating because the number above is the only place its cost is visible.
+The build id is in the cache key deliberately, so that a release cannot read
+entries written by the one before it — but `SCHEMA_VERSION` and `hasCurrentShape`
+already exist to answer "does this entry still mean what the code expects?", and
+they are the durable half of that protection. Taking the build id out of the key
+would remove the stampede entirely and move this ceiling back towards the 8,000
+the old arithmetic claimed.
+
+It is not free, which is why it has not been done. `hasCurrentShape` checks the
+*shape* of an entry, and the failure it cannot see is a stored field whose shape
+is unchanged and whose meaning is not — the streak moving from UTC to Anywhere on
+Earth was exactly that. The build id catches a forgotten `SCHEMA_VERSION` bump;
+the shape check cannot. See
+[decisions.md](decisions.md#schema_version-exists-alongside-the-build-id-and-reads-are-validated).
+
+So it stays, and the price is written here rather than discovered during a
+release.
 
 ## What warming costs
 
@@ -134,8 +205,10 @@ The cap of ten in `MAX_WARM_USERS` is generous relative to what the free plan ca
 actually absorb. One or two is free in practice. Anything more is a decision to
 make with this table open.
 
-The GitHub side of warming is nothing: 96 runs × ~4 queries ≈ 400 points a day
-against 120,000.
+The GitHub side of warming is nothing, and stays nothing when read against the
+hour rather than the day: four runs an hour × ~4 queries ≈ **16 points an hour
+against 5,000**. It is also the one thing here that is genuinely flat, which is
+more than can be said for the traffic it is smoothing.
 
 ## The cascade
 
@@ -145,8 +218,9 @@ The failure mode is not gradual, and it is worth recognising early.
 2. Writes start failing. `KvStatsCache.write` swallows the error by design — a
    lost write should cost one extra upstream call, not a broken image.
 3. But now *nothing is being cached*. Every request is a miss.
-4. Every miss is three to five GitHub queries. The hourly quota, which had
-   forty-five times the headroom, drains in minutes.
+4. Every miss is three to five GitHub queries. The hourly quota — which is an
+   *hourly* one, and had about seven times the headroom rather than the
+   forty-five this document used to claim — drains in minutes.
 5. Once GitHub returns 403, there is nothing fresh to fall back to, because step
    3 stopped writing.
 
@@ -273,10 +347,19 @@ Cloudflare's Workers Paid plan ($5/month) raises KV writes to **1 million a day*
 1,000,000 ÷ 4  ≈  250,000 active profiles
 ```
 
-Which puts the ceiling back on GitHub at ~8,000 profiles, where it belongs — the
-constraint is then the thing the architecture is actually designed around, and
-the next step past it is the `TokenProvider` migration to a GitHub App, where
-every installation brings its own 5,000 an hour.
+Which puts the ceiling back on GitHub — **at about 1,100 profiles, not the 8,000
+this section used to promise**, because what binds there is the deploy stampede
+and not the average rate. The constraint is then the thing the architecture is
+actually designed around, and the next step past it is the `TokenProvider`
+migration to a GitHub App, where every installation brings its own 5,000 an hour.
+
+That correction matters for sequencing more than it looks. On the free plan the
+order is not close: writes bind at ~150 and GitHub at ~1,100, so the App would
+be solving the second problem first. Past the paid plan the order reverses
+immediately and the App is the only remaining move — but "immediately" now means
+around a thousand profiles rather than around eight thousand, which is a great
+deal closer than this document used to imply. See
+[pending.md](pending.md#0-the-github-app-migration).
 
 ### The threshold is 150 active profiles, not 236
 

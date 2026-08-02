@@ -101,6 +101,16 @@ Committed but not yet deployed.
 
 ### Fixed
 
+- **The GitHub ceiling in [docs/limits.md](docs/limits.md) was optimistic by
+  about a factor of six.** GitHub's allowance is 5,000 points an *hour*; the
+  document turned it into 120,000 a day and divided, which assumes a flat rate.
+  A deploy is the opposite of flat — the build id is in the cache key, so every
+  release retires every entry and each active profile takes a miss inside one
+  `max-age` window. The real figure is **~1,100 active profiles, not ~8,000**,
+  which makes the gap between the two ceilings **seven times rather than
+  forty-five**. Writes still bind first and nothing else in the document
+  changes; the margin is just far thinner than it claimed, and it moves where a
+  GitHub App would start to matter from ~8,000 profiles to ~1,100.
 - **The landing page's generator fetched a card on every keystroke.** Typing a
   login into the box requested one for every prefix of it — and most prefixes of
   a real GitHub login are themselves real logins, so each one cached, cost three

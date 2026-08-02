@@ -392,7 +392,7 @@ thing that actually distinguishes "frozen" from "broken".
 `src/budget.ts`
 
 Running out of KV writes is the failure that cascades — nothing is cached, so
-every request is a miss, so the GitHub quota that had forty-five times the
+every request is a miss, so the GitHub quota that had several times the
 headroom drains in minutes — and until this existed there was no way to see it
 coming. The first symptom of the whole sequence was somebody's card going stale.
 
@@ -547,7 +547,7 @@ the wrong trade for this service specifically.
 
 A negative entry costs **one KV write** to save **one GraphQL query**. Writes
 are the resource with 1,000 a day and the cascade behind it; GraphQL queries are
-the resource with 120,000 a day and forty-five times the headroom. Paying the
+the resource with 5,000 an hour and several times the headroom. Paying the
 scarce one to protect the abundant one is the same inversion `limits.md` exists
 to argue against, and at enumeration scale — where a negative cache sounds most
 attractive — it would be actively worse: every invented login would become a

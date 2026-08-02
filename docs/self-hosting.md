@@ -279,7 +279,7 @@ used:
 ```
 
 **`writes` is the number to watch, not `rateLimit`.** The GitHub quota above it
-is roughly forty-five times further from being the constraint — see
+is roughly seven times further from being the constraint — see
 [limits.md](limits.md). `status` turns to `warning` at 80% of the write
 allowance, which is the earliest useful warning of the cascade that document
 describes: once writes start failing nothing is cached, so every request becomes

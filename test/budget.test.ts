@@ -30,7 +30,7 @@ beforeEach(() => {
 /**
  * The counter exists because running out of KV writes is the failure that
  * cascades — nothing gets cached, so every request is a miss, so the GitHub
- * quota that had forty-five times the headroom drains in minutes. Before this
+ * quota that had several times the headroom drains in minutes. Before this
  * there was no way to see it coming.
  */
 describe('the day’s write count', () => {

@@ -17,6 +17,99 @@ renderer rather than files somebody has to remember to redraw.
 
 ---
 
+## 0. The GitHub App migration
+
+**Blocked on one verification, and deliberately not built until it comes back.**
+Listed first because it is the item most likely to be picked up by somebody who
+has just read [limits.md](limits.md) and drawn the obvious conclusion from it.
+
+The service runs on a single personal access token: 5,000 points an hour for
+every reader of the instance. A GitHub App would give each account that installs
+it a budget of its own, so the ceiling would grow with adoption rather than
+against it, and installation tokens renew themselves so the expiring-token
+failure mode disappears. `TokenProvider` in `src/github/client.ts` exists for
+this — although its `getToken()` takes no argument, and choosing a credential per
+login means the subject has to reach it.
+
+### Why it is not the next thing to build
+
+The App raises the **GitHub** ceiling. That ceiling is ~1,100 active profiles;
+the one that binds is KV writes, at ~150 on a day with a release. Building the
+App first would be solving the second constraint while the first is a fifth of
+the distance away — and the five-dollar Workers Paid plan moves the binding one
+by three orders of magnitude in an afternoon.
+
+So the order is: **paid plan first, App second**, and the App becomes the right
+build at roughly a thousand active profiles rather than at the eight thousand
+this document used to imply. Two of the three pains that motivated it also have
+answers that cost nothing: a token dedicated to the service rather than shared
+with its owner's account, and a *classic* token set to no expiry, since
+fine-grained ones cap at a year.
+
+### The verification that decides it
+
+**Unverified premise: that an installation access token can read
+`contributionsCollection` for an arbitrary third party.** It is the field two of
+the three queries depend on, and it is user-scoped rather than repository-scoped,
+which is the axis a GitHub App is weakest on. If it cannot, the migration is not
+partially useful — it is dead, because contributions are the card.
+
+This cannot be checked without an App existing, and it takes five minutes once
+one does: create it with no permissions, install it, mint an installation token,
+and ask for `user(login: "torvalds") { contributionsCollection { … } }`. Record
+the outcome here either way. A negative result is worth more written down than
+rediscovered in six months.
+
+### What it should ask for, when it is built
+
+**Repository permissions: Metadata, read-only. Nothing else. No account
+permissions at all.** Metadata is mandatory for every GitHub App and cannot be
+declined, so this is the floor rather than a choice — which is the point: an App
+that asks for repository contents in order to draw a picture is an App nobody
+installs, and everything the service reads is public.
+
+Account permissions are specifically excluded. They require the user to
+*authorize* the App and not merely install it, which is a second consent dialog
+for data the service does not use.
+
+It must not change what a card shows. `privacy: PUBLIC` in the languages query
+is what guarantees that, and it is held by a test for exactly this reason — see
+[decisions.md](decisions.md#the-repositories-query-is-pinned-to-public-and-that-is-a-decision).
+The sentence "installing it changes nothing about your card, it only contributes
+quota" has to stay true, and it is true by construction rather than by promise.
+
+### Installations are resolved lazily, not by webhook
+
+When the App exists, the mapping from login to installation is looked up on
+demand and cached, rather than maintained by `installation` and
+`installation_repositories` webhooks.
+
+The reasoning is the usual one here. A webhook endpoint is a new public POST
+route, HMAC-SHA256 signature verification, and a third secret to set twice —
+real surface, for a stream of events that arrives a handful of times a year on an
+instance this size. Lazy resolution costs one KV read on the miss path and one
+extra API call the first time a login is seen, both cacheable, and it is
+self-correcting: an uninstall shows up as a failed token mint, which falls back
+to the shared token, which is the behaviour required anyway.
+
+**The criterion for changing that**, so it is a decision and not an omission.
+Switch to webhooks when any one of these is true:
+
+- **The negative cache stops being free.** Lazy resolution has to remember which
+  logins have *no* installation, or every card for a non-installer pays a lookup.
+  That memory is a KV write per login, and writes are the binding resource. Below
+  a few hundred profiles it is noise; if `profiles.active30d` and the write
+  budget ever make it visible at `/health`, the webhook is the cheaper store.
+- **Installations churn faster than the negative cache expires.** A user who
+  installs the App and still gets served by the shared token for hours has been
+  given a broken promise. If the cache TTL has to come down far enough that
+  re-lookups become frequent, push beats poll.
+- **The installation count reaches the low hundreds.** At that point the mapping
+  is worth holding as a set rather than rediscovering an entry at a time, and one
+  write per install event is unambiguously cheaper than one per unknown login.
+
+Until one of those holds, a webhook is machinery in exchange for nothing.
+
 ## 1. An exact hourly login budget, shared across isolates
 
 The per-address limits exist and the instance URL is safe to share. This is the
