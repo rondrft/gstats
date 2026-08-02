@@ -412,6 +412,84 @@ daily allowance and folding them in would misreport the one figure this is about
 `status: "warning"` at 80% rather than a number to interpret. Anyone reading
 `/health` while something is wrong is not in a state to divide.
 
+### The profile count is read out of the cache, not counted on the way in
+
+`src/usage.ts`, `src/cache.ts`
+
+[limits.md](limits.md) expresses the ceiling in **active profiles** — about 240
+of them on the free plan — and for a long time the instance had no idea how many
+it had. The figure that decides whether to pay Cloudflare five dollars a month
+was a guess.
+
+The obvious implementation is a set of logins in KV, updated on the way in. It
+is also the third appearance of the mistake this file already records twice, and
+the worst of the three. Every isolate discovers every login *separately*: a
+login is new to an isolate whether or not another isolate has already written it
+down, so the cost is not "one write per profile" but **one write per profile per
+isolate**, on a service that deliberately runs its cheapest path — a cache hit —
+without touching KV at all. A counter that spent a tenth of the allowance to
+report on the allowance would be answering the question by making it worse.
+
+So nothing is counted on the way in. The observation that makes that possible is
+that **the service already stores the answer**: a stats entry survives seven
+days against six hours of freshness — a property that exists for the stale
+fallback, not for this — so listing the cache is a list of every login fetched
+in the last week, free, exact, and already paid for. A rollup on the cron folds
+that listing into a thirty-day ledger. One write every six hours, four a day, and
+nothing at all on the request path.
+
+Three details that are easy to get wrong the other way:
+
+- **The listing crosses builds.** `cachePrefix` is namespaced by the deploy, and
+  reading through it would have counted only what had been requested since the
+  last release — which for an instance that deploys on every push is a number
+  with no meaning. `CACHE_KEY_ROOT` is the schema alone, so entries written by
+  the previous build still count towards the profiles the instance is carrying.
+- **A login is read off the end of the key, not the start.** The shape is
+  `<schema>:<build>:<login>:<fingerprint>`, and the build id is whatever
+  `SERVICE_VERSION` was set to. Splitting from the left assumes nobody ever
+  deploys with a colon in it; the fingerprint is always last.
+- **The ledger stamps a day per login, not a flag.** Without that there is no
+  window, and "profiles ever seen" grows for ever and stops describing anything.
+
+One property worth having deliberately rather than by luck: **the figure covers
+both hostnames.** The two Workers share a KV namespace, so a profile fetched
+through the old name is in the listing the new one folds, and the rollup runs on
+the primary alone because `[env.legacy]` sets `crons = []`. Counting on the
+request path would have needed both Workers to agree about it; deriving it from
+the shared cache means there is nothing to agree about.
+
+What this cannot see is a login that was never successfully fetched — a typo, an
+enumeration attempt, a profile requested while GitHub was down. That is the
+right exclusion rather than a limitation: those cost the instance nothing to
+keep, and counting them would let anybody inflate the number the paid-plan
+decision is made on.
+
+### Requests are counted, and nothing about who made them is
+
+`src/usage.ts`, `src/index.ts`
+
+Two hundred profiles nobody looks at and twenty embedded in busy READMEs are the
+same number of profiles and nothing like the same load, so `active30d` alone
+would be misleading in the direction that costs money. The request figure is the
+correction, and it is also the reading against the *other* free-plan ceiling —
+100,000 Worker invocations a day — which nothing else here reports.
+
+It is counted the way the write budget is, and inherits the same honest
+undercount. It costs one write per two hundred requests, which is the largest of
+the three diagnostic line items and the only one somebody trimming a tight
+budget would have a case for removing.
+
+**Nothing about the caller is recorded, anywhere, at any resolution.** No
+address, no user agent, no referrer, no per-request timestamp — the request
+figure is a single integer per UTC day, and the profile ledger holds a short
+hash of a login rather than the login. The logins are public and are in the
+cache keys already, so the hash buys no secrecy and is not claimed to: a 32-bit
+hash of a GitHub login is enumerable by anyone who cares. What it buys is that
+the one record here that outlives a cache entry cannot be read as a list of
+anybody, and cannot quietly become one later. A public service that counts
+things should be able to say exactly what it counts, and the README says it.
+
 ### A failed fetch serves the expired entry
 
 `src/stats.ts`, `src/index.ts`

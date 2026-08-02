@@ -261,8 +261,9 @@ cache miss until it is fetched again.
 ## Monitoring
 
 `/health` reports the build, whether a token is configured, whether the address
-limits are being enforced, the last observed GitHub quota window, and how much of
-the day's KV write allowance has gone:
+limits are being enforced, the last observed GitHub quota window, how much of
+the day's KV write allowance has gone, and how much of the instance is being
+used:
 
 ```json
 {
@@ -271,7 +272,9 @@ the day's KV write allowance has gone:
   "tokenConfigured": true,
   "rateLimiting": "enforced",
   "rateLimit": { "remaining": 4873, "limit": 5000, "reset": 1785000000, "observedAt": 1784996400 },
-  "writes": { "used": 312, "limit": 1000, "percent": 31 }
+  "writes":   { "used": 312, "limit": 1000, "percent": 31 },
+  "profiles": { "active30d": 46, "updatedAt": 1785312000000 },
+  "requests": { "last7d": 5981 }
 }
 ```
 
@@ -288,6 +291,24 @@ deletes, which Cloudflare bills separately. And it measures against the free
 plan's thousand a day unless you say otherwise, so on Workers Paid set
 `KV_WRITE_BUDGET` to `1000000` or the percentage will describe a limit you do
 not have.
+
+**`profiles.active30d` is where on that scale you are.** Distinct logins fetched
+in the last thirty days, which is the unit the ceiling in
+[limits.md](limits.md#when-to-move-to-the-paid-plan) is expressed in: about 236
+in steady state, and **about 150 in practice**, because a deploy retires every
+cache entry and so costs one extra write per active profile. That document has
+the table. `requests.last7d` is what the profiles are costing in Worker
+invocations, against a free-plan allowance of 100,000 a day.
+
+Both are gathered without recording anything about a visitor — the profile count
+is folded out of the cache's own key listing by the cron rather than counted per
+request, which is why it costs four writes a day rather than one per profile per
+isolate. `profiles.updatedAt` is when that last happened: if it stops moving your
+cron has stopped, and the count is frozen rather than falling. An instance
+deployed with `crons = []` never folds it at all and reports `null`.
+
+`requests.last7d` is a floor for the same reason `writes` is, and undercounts
+most on a quiet instance, which is where the figure matters least.
 
 `rateLimit` may be `null` on a quiet instance. The reading now lives in the
 isolate rather than in KV, precisely so that keeping it current does not cost

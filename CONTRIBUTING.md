@@ -46,6 +46,8 @@ src/
   params.ts         query string parsing, validation, sanitisation
   ratelimit.ts      per-address limits on /api: requests, distinct logins
   budget.ts         how much of the day's KV write allowance has gone
+  usage.ts          how many distinct profiles and how many requests, both
+                    gathered without recording anything about a visitor
   brand.ts          icon routes, bundled from assets/brand/ as modules
   stats.ts          cache -> GitHub -> stale fallback
   purge.ts          POST /purge: auth, rate limit, targeted invalidation

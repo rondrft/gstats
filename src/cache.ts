@@ -14,7 +14,7 @@
 
 import { recordWrite, recordWriteFailure } from './budget'
 import type { RateLimitState, StatsData } from './github/types'
-import type { DataParams } from './params'
+import { type DataParams, USERNAME_PATTERN } from './params'
 
 /**
  * What an entry *means*. Bump this whenever `StatsData` gains, loses or
@@ -96,6 +96,37 @@ export function cachePrefix(username: string, build: string): string {
 }
 
 /**
+ * The prefix every stats entry lives under, whatever build wrote it.
+ *
+ * `cachePrefix` is what a *reader* uses, and it is deliberately narrower: an
+ * entry from another build is unreachable from this one. This is the listing
+ * root, for the one caller that wants entries across builds rather than the
+ * ones it could serve — `src/usage.ts`, which counts how many distinct logins
+ * the instance has fetched lately without storing anything to count.
+ */
+export const CACHE_KEY_ROOT = `${SCHEMA_VERSION}:`
+
+/**
+ * The login a key belongs to, or `null` if the key is not a stats entry.
+ *
+ * Read from the end rather than the start: the shape is
+ * `<schema>:<build>:<login>:<fingerprint>`, and the build id is whatever
+ * `SERVICE_VERSION` was set to, which this cannot assume is colon-free. The
+ * fingerprint is always last and the login always before it.
+ *
+ * The other things stored under the same root — `v3:rate-limit` — have too few
+ * parts to be mistaken for an entry, and the login is checked against the same
+ * pattern that let it into a key in the first place.
+ */
+export function loginFromCacheKey(key: string): string | null {
+  const parts = key.split(':')
+  if (parts.length < 4 || parts[0] !== SCHEMA_VERSION) return null
+
+  const login = parts.at(-2) ?? ''
+  return USERNAME_PATTERN.test(login) ? login : null
+}
+
+/**
  * Cache key: `<schema>:<build>:<login>:<hash of the data-shaping parameters>`.
  *
  * Only inputs that change what ends up *stored* participate in the hash: the
@@ -131,8 +162,11 @@ export function cacheKey(params: DataParams, build: string): string {
  * and collisions between different shapes for the *same* user are the only ones
  * that could matter. A non-cryptographic hash is the right tool, and it avoids
  * making the key path async as WebCrypto would.
+ *
+ * Exported because `src/usage.ts` wants the same thing for a different reason:
+ * a stable short token for a login that is not the login itself.
  */
-function fingerprint(value: string): string {
+export function fingerprint(value: string): string {
   let hash = 0x811c9dc5
   for (let index = 0; index < value.length; index += 1) {
     hash ^= value.charCodeAt(index)

@@ -36,6 +36,7 @@ import {
 import { renderCard } from './render/cards'
 import { ERROR_CACHE_SECONDS, type ErrorCardKind, renderErrorCard } from './render/error-card'
 import { type CacheStatus, getStats } from './stats'
+import { readProfileUsage, readRequestUsage, recordRequest, rollUpProfiles } from './usage'
 import { KvWarmStore, parseWarmUsers, warmUsers } from './warm'
 
 export interface Env {
@@ -159,12 +160,21 @@ export default {
     }
   },
   /**
-   * Cron trigger. Does nothing unless `WARM_USERS` is set, so an instance that
-   * did not ask for warming pays one no-op invocation per interval and nothing
-   * else — no fetches, no writes.
+   * Cron trigger, and the two jobs on it.
+   *
+   * Warming does nothing unless `WARM_USERS` is set, so an instance that did
+   * not ask for it pays one no-op invocation per interval and nothing else. The
+   * profile rollup runs on every instance, costs one KV read on all but four
+   * runs a day, and is the only place the usage figures are gathered — see
+   * `src/usage.ts` for why they are derived here rather than counted on the
+   * request path.
+   *
+   * They are independent, so one failing must not skip the other.
    */
   async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext) {
-    ctx.waitUntil(warm(env))
+    ctx.waitUntil(
+      Promise.allSettled([warm(env), rollUpProfiles(env.STATS_CACHE)]).then(() => undefined),
+    )
   },
 } satisfies ExportedHandler<Env>
 
@@ -208,6 +218,13 @@ async function handleCard(request: Request, url: URL, env: Env): Promise<Respons
   })
 
   if (!decision.allowed) return tooManyRequests(decision, style)
+
+  // Counted after the refusal and before anything else, so the figure describes
+  // requests this instance answered rather than traffic aimed at it. It is a
+  // number in memory on all but one request in a couple of hundred; see
+  // `src/usage.ts` for what that one costs and why nothing about the caller is
+  // recorded alongside it.
+  await recordRequest(env.STATS_CACHE)
 
   if (!parsed.ok) {
     const kind: ErrorCardKind =
@@ -354,10 +371,12 @@ async function handleHealth(env: Env): Promise<Response> {
     Number.MAX_SAFE_INTEGER,
   )
 
-  const [rateLimits, lastWarm, writes] = await Promise.all([
+  const [rateLimits, lastWarm, writes, profiles, requests] = await Promise.all([
     new KvRateLimitStore(env.STATS_CACHE).read(),
     new KvWarmStore(env.STATS_CACHE).read(),
     readWriteBudget(env.STATS_CACHE, writeLimit),
+    readProfileUsage(env.STATS_CACHE),
+    readRequestUsage(env.STATS_CACHE),
   ])
 
   const configured = parseWarmUsers(env.WARM_USERS)
@@ -384,6 +403,15 @@ async function handleHealth(env: Env): Promise<Response> {
       // How much of today's KV write allowance has gone. See docs/limits.md for
       // why this is the ceiling that matters and not the GitHub quota above it.
       writes: { used: writes.used, limit: writes.limit, percent: writes.percent },
+      // How many distinct profiles this instance is carrying, which is what the
+      // ceiling in docs/limits.md is expressed in and was previously a guess.
+      // Nothing about a visitor is recorded to produce it; see src/usage.ts.
+      // `updatedAt` is null until the cron has folded the ledger once, and stops
+      // moving if the cron stops — the same signal `warming.lastRun` carries.
+      profiles: { active30d: profiles.active30d, updatedAt: profiles.updatedAt },
+      // Card requests over the last week, which is a floor: an isolate recycled
+      // before it flushes takes its pending count with it.
+      requests: { last7d: requests.last7d },
       // A cron that has stopped firing looks identical to one that is working
       // until somebody checks when it last did. Reporting the timestamp and the
       // outcome is what makes that visible without reading logs.

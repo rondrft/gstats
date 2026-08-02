@@ -4,7 +4,9 @@ In priority order. The reason matters more than the item — several of these lo
 like polish and are not.
 
 Recently closed, so nobody goes looking for them: per-address rate limiting, the
-write-budget figure at `/health`, stale-while-error, the language bars that did
+write-budget figure at `/health`, the active-profile count beside it — which is
+what the ceiling in [limits.md](limits.md) is expressed in and was a guess until
+it was measured — stale-while-error, the language bars that did
 not scale with their percentage, the ring track that made a third look like four
 fifths on light themes, the quota reading that was written on every cache miss —
 and then sampled, and now not written at all unless it is bad news — the streak's
@@ -75,10 +77,18 @@ is indistinguishable from a cron that has stopped. Probably: write on any change
 and otherwise at most hourly.
 
 There is now a way to tell whether this is worth doing on a given instance
-rather than guessing, which is the `writes` figure at `/health`. The counter that
-produces it is itself the other line item, at one write in 26; lowering
-`PERSIST_EVERY` in `src/budget.ts` buys accuracy with the resource being
-measured, which is the trade to be suspicious of.
+rather than guessing, which is the `writes` figure at `/health`, and to tell
+whether the instance is anywhere near needing it at all, which is
+`profiles.active30d` beside it.
+
+The diagnostics are themselves the remaining line items, and they are small on
+purpose: the write counter at one write in 26, the request counter at one per
+200 card requests, and the profile rollup at four a day. Lowering
+`PERSIST_EVERY` in `src/budget.ts` or `PERSIST_EVERY_REQUESTS` in
+`src/usage.ts` buys accuracy with the resource being measured, which is the
+trade to be suspicious of. The request counter is the largest of the three and
+the one with the weakest claim on a tight budget; the profile count is nearly
+free because it is derived from the cache rather than counted per request.
 
 ## 4. `WHITELIST` for self-hosting with a private token
 

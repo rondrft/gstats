@@ -42,10 +42,28 @@ that `/health` served by a cold isolate reports whatever KV last heard, or
 `null`. For a diagnostic that is the right trade; see
 [decisions.md](decisions.md#the-quota-reading-lives-in-the-isolate-not-in-kv).
 
-What remains is the write counter that produces the `writes` figure at
-`/health`. It accumulates in the isolate and flushes every 25 writes, and the
-flush counts itself — so it costs **one write in 26**, about 3.8%, and it scales
-with the traffic rather than sitting on the budget as a fixed floor.
+What remains is what `/health` costs to keep current. Three line items, and they
+are deliberately of three different shapes:
+
+| | Cost | Shape |
+| --- | --- | --- |
+| The write counter (`writes`) | one write in 26 | proportional to writes |
+| The request counter (`requests.last7d`) | one write per 200 card requests | proportional to traffic |
+| The profile rollup (`profiles.active30d`) | 4 writes a day | fixed |
+
+The write counter accumulates in the isolate and flushes every 25 writes, and
+the flush counts itself — **one write in 26**, about 3.8%.
+
+The request counter works the same way with a larger interval, which at roughly
+a dozen requests per cache write puts it near one write in twenty of what the
+cards themselves cost.
+
+The profile rollup is the only fixed cost here, and it is four writes rather
+than 288 because it does not count anything on the way in: a stats entry
+survives seven days, so *the cache is already a list of the logins this instance
+has fetched*, and the rollup only has to fold that listing into a thirty-day
+ledger. Six hours between folds, one write each. See
+[decisions.md](decisions.md#the-profile-count-is-read-out-of-the-cache-not-counted-on-the-way-in).
 
 ## The two ceilings
 
@@ -53,17 +71,29 @@ with the traffic rather than sitting on the budget as a fixed floor.
 every other Worker on the same account, so the real allowance is lower.
 
 ```
-1,000 × 25/26 counter overhead  =  ~961 writes for cards
-~961 ÷ 4 writes/profile/day     ≈  240 active profiles
+1,000 × 25/26 write counter     =  ~961 writes for everything else
+~961 − 4 profile rollup         =  ~957
+~957 ÷ 4.06 writes/profile/day  ≈  236 active profiles
+```
+
+The `4.06` is the four cache misses a profile costs plus its share of the
+request counter, at an assumed dozen requests per profile per day. That
+assumption is now the only estimate in this document, and it does not have to
+stay one: `/health` reports the requests actually served, so a given instance
+can substitute its own figure —
+
+```
+writes/day  ≈  (4 × profiles  +  requests/day ÷ 200  +  4) × 26/25
 ```
 
 The progression is worth keeping in view, because each step moved the number for
 a different reason: **~125** when the quota reading was written on every miss,
-**~178** when it was sampled every five minutes, **~240** now that it is only
-written when it matters. A hypothetical instance with no write counter at all
-would reach 250 — the counter costs about ten profiles of headroom and buys the
-ability to see the ceiling coming, which is a trade this document exists to
-argue for.
+**~178** when it was sampled every five minutes, **~240** once it was only
+written when it mattered, **~236** now that the instance also counts what it is
+serving. A hypothetical instance with no diagnostics at all would reach 250. The
+whole apparatus costs about fourteen profiles of headroom and buys knowing where
+on the scale you are, which is a trade this document exists to argue for — the
+alternative is finding out from a card going stale.
 
 **GitHub GraphQL: 5,000 points per hour = 120,000 per day**, per token.
 
@@ -156,12 +186,33 @@ Softening the cascade is not the same as noticing it. Until recently there was
 no way to know an instance was at 900 writes rather than 200, which meant the
 first symptom of the whole sequence above was somebody's card going stale.
 
-`/health` now reports the day's write count:
+`/health` now reports the day's write count, and next to it the two figures that
+say what the writes were *for*:
 
 ```json
 "status": "warning",
-"writes": { "used": 831, "limit": 1000, "percent": 83 }
+"writes":   { "used": 831, "limit": 1000, "percent": 83 },
+"profiles": { "active30d": 187, "updatedAt": 1785312000000 },
+"requests": { "last7d": 24019 }
 ```
+
+`writes` is the ceiling; `profiles.active30d` is the number the ceiling is
+*expressed in*, and until it existed the answer to "how far along are we?" was a
+guess. It counts distinct logins fetched in the last thirty days — an instance
+that served somebody once in April is not carrying them in July. `requests` is
+what separates two hundred profiles nobody looks at from twenty in busy READMEs,
+and is also the reading against the other free-plan ceiling, 100,000 Worker
+invocations a day.
+
+Two things to know before quoting either. `profiles.updatedAt` is when the
+rollup last ran; if it stops moving, the cron has stopped and the count is
+frozen rather than falling — the same signal `warming.lastRun` carries.
+`requests.last7d` is a floor, for exactly the reasons the write count is: an
+isolate recycled before it flushes takes its pending count with it, so a quiet
+instance under-reports, which is where it matters least.
+
+Neither figure involves anything about a visitor. See the privacy note in the
+[README](../README.md#what-this-service-records).
 
 `status` turns from `ok` to `warning` at 80%. The count is UTC-daily, because
 that is when Cloudflare's allowance resets, and it is a **floor rather than an
@@ -194,7 +245,7 @@ Cloudflare can add rules to. The same trap catches the Cache API, whose
 operations are documented no-ops on `workers.dev` — which is why the login
 ledger is kept in the isolate rather than there.
 
-## The paid plan
+## When to move to the paid plan
 
 Cloudflare's Workers Paid plan ($5/month) raises KV writes to **1 million a day**.
 
@@ -206,6 +257,50 @@ Which puts the ceiling back on GitHub at ~8,000 profiles, where it belongs — t
 constraint is then the thing the architecture is actually designed around, and
 the next step past it is the `TokenProvider` migration to a GitHub App, where
 every installation brings its own 5,000 an hour.
+
+### The threshold is 150 active profiles, not 236
+
+**Read `profiles.active30d` at `/health` and switch when it reaches about 150.**
+The rest of this section is where that number comes from, because "switch near
+the ceiling" is the wrong instinct and the gap is bigger than it looks.
+
+The ceiling of ~236 is a *steady state* figure and no day is one. The thing that
+breaks the steady state is a deploy: the build id is part of the cache key, so
+**every deploy retires every entry**, and the first request for each active
+profile after a release is a miss. A deploy costs one extra write per active
+profile, on top of the four the day was already going to spend.
+
+So the day's writes are about `(4 × N + N per deploy + N/17 + 4) × 26/25`, and
+what matters is where that first crosses the 80% line `/health` warns at:
+
+| Active profiles | A quiet day | One deploy | Two deploys |
+| --- | --- | --- | --- |
+| 100 | 43% | 53% | 63% |
+| 150 | 64% | **79%** | 95% |
+| 190 | **81%** | 100% | over |
+| 236 | 100% | over | over |
+
+Steady state trips the warning at about **190**. A day with one deploy trips it
+at about **150**, and this project deploys on every push to `main`. Two in a day
+is an ordinary afternoon.
+
+Below **100** there is nothing to think about. Between 100 and 150, watch
+`writes.percent` on days you release — that is the band where the figure starts
+moving. **At 150, move**: five dollars against an instance that begins serving
+stale cards on its busiest days, and the paid plan puts the next ceiling three
+orders of magnitude away.
+
+Above 200 the instance is already spending its margin. Nothing breaks loudly —
+[the cascade](#the-cascade) is softened, so what happens is that cards quietly
+get older — which is precisely why the decision wants a number to watch rather
+than a symptom to wait for.
+
+Two things to do when you switch, neither of which is automatic:
+
+- Set `KV_WRITE_BUDGET` to `1000000`, or `/health` will keep measuring against a
+  limit the instance no longer has and warn about 8% of the real one.
+- Set it on **both** deploy targets. It is a `[vars]` entry, and vars are not
+  inherited by `[env.legacy]`.
 
 ## What does not cost anything
 

@@ -27,6 +27,23 @@ Committed but not yet deployed.
 
 ### Added
 
+- **`/health` says how many distinct profiles the instance is carrying**, as
+  `profiles.active30d`, next to `requests.last7d`. The ceiling in
+  [docs/limits.md](docs/limits.md) has always been expressed in active profiles
+  and there was no way to tell whether an instance had twenty of them or two
+  hundred — the one number the decision to pay Cloudflare turns on was a guess.
+  The threshold is now written down too: **move at about 150 active profiles,
+  not at the 236 the steady-state arithmetic gives**, because a deploy retires
+  every cache entry and so costs one extra write per active profile, and a
+  release day is what trips the warning first.
+
+  **Nothing about a visitor is recorded to produce either figure** — no address,
+  no user agent, no referrer, no per-request timestamp. The profile count is
+  derived from the cache's own key listing on the cron rather than counted on the
+  way in, which is what keeps it to four writes a day instead of one per profile
+  per isolate, and the ledger behind it holds a short hash of each login rather
+  than the login. The README now has a section stating exactly what is counted
+  and what is not.
 - **The snippet the landing page hands over is HTML, with the card wrapped in a
   link to the project.** The plain markdown image is a click away beside it, and
   both are built from the same URL, so anything you set in the controls is in

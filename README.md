@@ -259,6 +259,51 @@ know it exists.
 
 ---
 
+## What this service records
+
+Enough to know whether it is about to run out of Cloudflare's free tier, and
+nothing else. Since it counts something, it should say what.
+
+**Nothing about you is stored.** No IP address, no user agent, no referrer, no
+cookie, no timestamp of any individual request, and no record anywhere tying a
+profile to whoever asked for it. Nothing of that kind is written to the
+service's storage, in any form, for any length of time. A card embedded in a
+README is fetched by GitHub's image proxy on the reader's behalf in any case, so
+for most readers there is nothing to see even if there were somewhere to put it.
+
+The one exception, stated because "nothing" should mean it: the **rate limiter**
+holds the caller's address in the running instance's memory, so that "twenty
+distinct profiles an hour, per address" can be enforced at all. It is never
+written to storage, it is not written to any log, it is gone when that instance
+is recycled, and it is deliberately not in KV — [a ledger there would cost more
+than the abuse it prevents](docs/pending.md).
+
+**Two numbers about the instance**, both visible to anybody at
+[`/health`](https://gstats.rondrft.workers.dev/health):
+
+- **How many distinct GitHub logins have been fetched in the last 30 days.** This
+  is the figure the service's own capacity is measured in — the free plan tops
+  out somewhere around 240 of them — and it was a guess until it was counted. It
+  is derived from the cache the service already keeps rather than recorded as
+  people arrive, and the ledger behind it stores a short hash of each login
+  rather than the login. That is not a secrecy claim: GitHub logins are public,
+  and a hash of one is trivially reversible by anyone who bothers. It is that
+  this record has no use for the identity, so it does not keep one.
+- **How many cards were served in the last 7 days**, as one total per day. Not
+  per profile, not per reader — one integer.
+
+See [docs/limits.md](docs/limits.md) for the arithmetic these two figures feed,
+and
+[docs/decisions.md](docs/decisions.md#the-profile-count-is-read-out-of-the-cache-not-counted-on-the-way-in)
+for why counting profiles on the way in was rejected — it would have cost about a
+tenth of the very allowance the count exists to watch.
+
+A self-hosted instance measures itself the same way and reports to nobody: there
+is no telemetry, no phone-home, and no shared endpoint. The figures live in your
+own KV namespace.
+
+---
+
 ## Running your own
 
 About five minutes, and it fits inside the Cloudflare free tier.
