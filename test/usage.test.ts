@@ -62,6 +62,11 @@ async function activeAt(now: number): Promise<number> {
   return (await readProfileUsage(kv, now)).active30d
 }
 
+/** Everything fetched at all, one-shot lookups included. */
+async function seenAt(now: number): Promise<number> {
+  return (await readProfileUsage(kv, now)).seen30d
+}
+
 beforeEach(() => {
   forgetRequestTally()
 })
@@ -74,12 +79,51 @@ beforeEach(() => {
 describe('counting distinct profiles', () => {
   it('counts a login the cache holds an entry for', async () => {
     const now = nextDay()
-    const before = await activeAt(now)
+    const before = await seenAt(now)
 
     await cache('rollup-one')
     await rollUpProfiles(kv, now)
 
-    expect(await activeAt(now)).toBe(before + 1)
+    expect(await seenAt(now)).toBe(before + 1)
+  })
+
+  /**
+   * `docs/limits.md` defines an active profile as one somebody is loading often
+   * enough that its entry is refetched as soon as it goes stale — four misses a
+   * day, which is where the whole ceiling comes from. A login fetched once and
+   * never again costs one write in its life and is not that.
+   *
+   * The distinction is not academic. The landing page's generator used to fetch
+   * a card on every keystroke, so one visitor typing one login left a trail of
+   * its prefixes in the cache — and most prefixes of a real login are real
+   * logins, so a count that could not tell a lookup from a tenant reported
+   * thirty-five profiles where fewer than ten people were being served.
+   */
+  it('does not count a login seen on only one day as active', async () => {
+    const now = nextDay()
+    // From an empty ledger, so every login in the cache is a first sighting and
+    // the active count has to be exactly nothing.
+    await kv.delete('usage:profiles')
+
+    await cache('rollup-oneshot')
+    await rollUpProfiles(kv, now)
+
+    expect(await seenAt(now)).toBeGreaterThan(0)
+    expect(await activeAt(now)).toBe(0)
+  })
+
+  it('counts it once it is still there the next day', async () => {
+    // Two days from the allocator rather than one plus a day, so the ledger's
+    // clock never runs ahead of the test after this one — a rollup stamped in
+    // the future is a rollup the next test silently skips.
+    const first = nextDay()
+    const second = nextDay()
+
+    await cache('rollup-returning')
+    await rollUpProfiles(kv, first)
+    await rollUpProfiles(kv, second)
+
+    expect(await activeAt(second)).toBeGreaterThan(0)
   })
 
   /**
@@ -89,25 +133,25 @@ describe('counting distinct profiles', () => {
    */
   it('counts a login once however many entries it has', async () => {
     const now = nextDay()
-    const before = await activeAt(now)
+    const before = await seenAt(now)
 
     await cache('rollup-two')
     await cache('rollup-two', 'hide=langs')
     await cache('rollup-two', 'tz=Europe/Madrid')
     await rollUpProfiles(kv, now)
 
-    expect(await activeAt(now)).toBe(before + 1)
+    expect(await seenAt(now)).toBe(before + 1)
   })
 
   it('does not run again inside its own interval', async () => {
     const now = nextDay()
     await rollUpProfiles(kv, now)
-    const settled = await activeAt(now)
+    const settled = await seenAt(now)
 
     await cache('rollup-throttled')
     await rollUpProfiles(kv, now + 60_000)
 
-    expect(await activeAt(now)).toBe(settled)
+    expect(await seenAt(now)).toBe(settled)
   })
 
   /**
@@ -120,11 +164,11 @@ describe('counting distinct profiles', () => {
 
     await cache('rollup-lapsed')
     await rollUpProfiles(kv, now)
-    expect(await activeAt(now)).toBeGreaterThan(0)
+    expect(await seenAt(now)).toBeGreaterThan(0)
 
     // Same ledger, read a month later. Nothing has to be deleted for this: the
     // stamp is what expires, and the next rollup drops it.
-    expect(await activeAt(now + 31 * DAY_MS)).toBe(0)
+    expect(await seenAt(now + 31 * DAY_MS)).toBe(0)
   })
 
   it('reports when it last ran, so a stopped cron is visible', async () => {
@@ -160,7 +204,7 @@ describe('counting distinct profiles', () => {
 
     const usage = await readProfileUsage(kv)
     expect(usage.updatedAt).not.toBeNull()
-    expect(usage.active30d).toBeGreaterThan(0)
+    expect(usage.seen30d).toBeGreaterThan(0)
   })
 })
 
@@ -310,5 +354,65 @@ describe('/health reports both figures', () => {
 
     expect(body.profiles.updatedAt).toBeNull()
     expect(body.profiles.active30d).toBe(0)
+  })
+})
+
+/**
+ * `/health` answers "how many", which is the capacity question and needs no
+ * identities. This is the other question — "which" — and it exists because
+ * looking at real profiles is how edge cases get found.
+ */
+describe('GET /profiles', () => {
+  const withToken = { ...testEnv, PURGE_TOKEN: 'operator-secret' }
+
+  const get = (environment: Env, authorization?: string) =>
+    worker.fetch(
+      new Request(
+        'https://stats.example.com/profiles',
+        authorization === undefined ? {} : { headers: { authorization } },
+      ),
+      environment,
+    )
+
+  /**
+   * A `401` would confirm to an anonymous caller that a list of users is kept
+   * here, which is precisely what the rest of this module is arranged not to
+   * advertise.
+   */
+  it('does not admit to existing without the token', async () => {
+    expect((await get(withToken)).status).toBe(404)
+    expect((await get(withToken, 'Bearer wrong')).status).toBe(404)
+    expect((await get(testEnv, 'Bearer operator-secret')).status).toBe(404)
+  })
+
+  it('lists the logins the cache is holding', async () => {
+    await cache('profiles-endpoint')
+
+    const response = await get(withToken, 'Bearer operator-secret')
+    const body = (await response.json()) as { count: number; logins: string[]; window: string }
+
+    expect(response.status).toBe(200)
+    expect(body.logins).toContain('profiles-endpoint')
+    expect(body.count).toBe(body.logins.length)
+    // The listing can only speak for as long as an entry lives, and says so.
+    expect(body.window).toContain('7 days')
+  })
+
+  it('is derived from the cache and not from the hashed ledger', async () => {
+    await kv.delete('usage:profiles')
+    await cache('profiles-no-ledger')
+
+    const body = (await (await get(withToken, 'Bearer operator-secret')).json()) as {
+      logins: string[]
+    }
+
+    expect(body.logins).toContain('profiles-no-ledger')
+  })
+
+  it('is not counted as card traffic', async () => {
+    const before = (await readRequestUsage(kv)).last7d
+    await get(withToken, 'Bearer operator-secret')
+
+    expect((await readRequestUsage(kv)).last7d).toBe(before)
   })
 })

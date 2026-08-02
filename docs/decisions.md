@@ -477,6 +477,138 @@ right exclusion rather than a limitation: those cost the instance nothing to
 keep, and counting them would let anybody inflate the number the paid-plan
 decision is made on.
 
+### The generator debounces its preview, because a keystroke was a card request
+
+`src/landing.ts`
+
+The generator repaints the preview by assigning to an `<img>` src, and it did
+that on `input` — which fires on every keystroke. So somebody typing a login
+into the box fetched a card for **every prefix of it**.
+
+The reason that is not a rounding error is the part worth remembering: **most
+prefixes of a real GitHub login are themselves real GitHub logins.** Short
+logins are all taken. So the prefixes did not bounce off as 404s; they resolved,
+and each one cost three to five GraphQL queries and a KV write — against the
+one resource [limits.md](limits.md) says the service runs out of first. One
+visitor typing `bautista-diaz` left `b`, `ba`, `baut`, `bauti`, `bautist`,
+`bautista`, `bautista-d` and `bautista-diaz` in the cache. Three visitors did it
+in a week. **Found by reading the KV key listing**, which is also the only place
+it was visible: every one of those looks exactly like a profile somebody
+embedded.
+
+The prefixes that are *not* real accounts were the cheap case — an upstream
+404, no entry written — and still spent a shared quota on nothing.
+
+The fix is a 500 ms debounce on the preview and nothing else. The snippet is
+text and stays instant, because it costs nothing and is what people are actually
+watching. The same timer fixed a second case nobody had noticed: the colour
+pickers fire `input` continuously while being dragged, and colours are not in
+the cache key, so every step of a drag was a request for a card the service had
+already drawn. `repaintPreview` also refuses to reload a URL that is already on
+screen.
+
+`test/landing.test.ts` runs the script against a stub DOM and types a login one
+character at a time. A textual assertion that the source contains `setTimeout`
+would not have caught this coming back.
+
+### A profile that was looked up once is not an active profile
+
+`src/usage.ts`
+
+The ledger records `[first, last]` per login rather than just the last day, and
+`active30d` counts only logins folded on **more than one day**. `seen30d`, next
+to it, counts everything.
+
+This is not a filter bolted on after the fact — it is the figure finally
+matching its own definition. [limits.md](limits.md) has always defined an active
+profile as one somebody is loading often enough that its entry is refetched as
+soon as it goes stale: four misses a day, which is where the entire ceiling
+comes from. A login fetched once and never again costs one write in its life.
+Counting the two the same way overstated the number the paid-plan decision is
+made on, and the first version of this counter did exactly that.
+
+The bug above is what made the gap visible: `active30d` read 35 on an instance
+serving fewer than ten people. Both figures are reported, because the gap
+between them is itself the diagnostic — a wide one means something is generating
+profile lookups nobody asked for, which is precisely how the keystroke problem
+was found.
+
+The cost is that a genuinely new profile takes up to a day to start counting.
+That is the right direction for a capacity figure: it is slow to admit a new
+tenant and quick to forget a stranger.
+
+### Failed lookups are not cached, and that is the cheaper answer
+
+`src/stats.ts`
+
+A login that does not exist writes nothing to KV — the error propagates and the
+card is drawn from it. Caching those would look like an obvious saving and is
+the wrong trade for this service specifically.
+
+A negative entry costs **one KV write** to save **one GraphQL query**. Writes
+are the resource with 1,000 a day and the cascade behind it; GraphQL queries are
+the resource with 120,000 a day and forty-five times the headroom. Paying the
+scarce one to protect the abundant one is the same inversion `limits.md` exists
+to argue against, and at enumeration scale — where a negative cache sounds most
+attractive — it would be actively worse: every invented login would become a
+write, which is exactly the traffic shape the login rate limit exists to stop.
+
+The error card carries a one-minute `max-age`, so a client that asks again
+immediately is answered without reaching the service at all. That is the layer
+where a failure should be cached, and it costs nothing.
+
+### `GET /profiles` reads the cache, not the ledger
+
+`src/index.ts`, `src/usage.ts`
+
+`/health` answers *how many*, which is the capacity question and needs no
+identities — so the ledger behind it stores hashes and is structurally unable to
+answer *which*. That is deliberate, and it left a real gap: looking at actual
+profiles is how edge cases get found, and the keystroke bug above was found
+exactly that way, by hand, in a key listing.
+
+So there is an endpoint for it, and three choices in it are worth stating:
+
+- **It derives the list from the cache key listing, live**, rather than from the
+  ledger. The keys carry the login in clear for the seven days an entry lives,
+  so this stores nothing new and the ledger stays hashed. Adding plaintext
+  logins to the ledger to serve this would have traded a permanent record for a
+  convenience.
+- **Its window is therefore the cache's seven days, not the ledger's thirty**,
+  and the response says so in a field rather than leaving the two to be
+  confused. They are different questions and they have different answers.
+- **It is behind `PURGE_TOKEN` and answers `404` without it.** One secret rather
+  than two because whoever holds it is running the instance, and anybody running
+  the instance can already read every key in the namespace with `wrangler kv key
+  list` — a second token would imply a boundary that does not exist. The `404`
+  is the point of the pairing: a `401` would confirm to an anonymous caller that
+  a list of users is kept here, which is the one thing the rest of this design is
+  arranged not to advertise.
+
+### The repositories query is pinned to public, and that is a decision
+
+`src/github/languages.ts`, `test/languages.test.ts`
+
+The languages query carries `privacy: PUBLIC` alongside `ownerAffiliations:
+OWNER` and `isFork: false`. It reads like a limitation of whatever token happens
+to be in use. It is not — it is a constraint on what the card is allowed to mean,
+and it is now held by a test so that nobody "fixes" it in six months.
+
+The case that makes it load-bearing does not exist yet. A GitHub App
+installation token reaches whatever repositories the installer granted it,
+including private ones. On the day authentication changes, this one line is the
+difference between "installing the App is a quota improvement nobody can see"
+and "installing the App silently publishes your private language breakdown to
+every reader of your README". The README calls giving the shared token private
+access *a leak wearing a feature's clothes*; the self-inflicted version is the
+same leak and harder to notice, because the person enabling it believes they are
+helping with a quota.
+
+Two other things follow from it, and both are worth more than the line costs.
+The card keeps the same meaning for everybody, whoever fetched it and however —
+which is what the URL contract is about. And the pitch for the App can be honest
+in one sentence: it changes nothing about your card.
+
 ### Requests are counted, and nothing about who made them is
 
 `src/usage.ts`, `src/index.ts`

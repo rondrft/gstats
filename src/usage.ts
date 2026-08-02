@@ -123,21 +123,61 @@ async function readCount(namespace: KVNamespace, key: string): Promise<number> {
 }
 
 /**
- * Which logins have been seen, and when.
+ * Which logins have been seen, and over what span.
  *
- * `seen` maps a short hash of the login to the day it was last folded in. Not
- * namespaced by build or schema: it measures the instance, not what the
- * instance happens to be storing this week, and a deploy must not reset it.
+ * `seen` maps a short hash of the login to `[first, last]` — the first and most
+ * recent day it was folded in. Not namespaced by build or schema: it measures
+ * the instance, not what the instance happens to be storing this week, and a
+ * deploy must not reset it.
+ *
+ * **The span is what makes the figure mean what `docs/limits.md` says it
+ * means.** That document defines an active profile as one somebody is loading
+ * often enough that its entry is refetched as soon as it goes stale — four
+ * misses a day, which is where the whole ceiling comes from. A login fetched
+ * once and never again costs one write in its life and is not that. Recording
+ * only the last day could not tell the two apart, and the difference is not
+ * academic: the landing page's generator used to fetch a card on every
+ * keystroke, so a visitor typing one login left a trail of its prefixes behind
+ * them — and most prefixes of a real login are real logins, so they were
+ * indistinguishable from profiles somebody had embedded.
  */
 interface ProfileLedger {
   /** Epoch milliseconds of the last rollup. */
   updatedAt: number
-  seen: Record<string, number>
+  seen: Record<string, LedgerSpan | number>
+}
+
+/** `[first day folded, most recent day folded]`, as whole days since the epoch. */
+type LedgerSpan = [number, number]
+
+/**
+ * Reads either shape.
+ *
+ * The first version of the ledger stored one day per login. Rather than
+ * discarding a month of observations on the deploy that changed it, a bare
+ * number is read as a profile seen once, on that day — which is exactly what it
+ * recorded.
+ */
+function span(stored: LedgerSpan | number): LedgerSpan {
+  return typeof stored === 'number' ? [stored, stored] : stored
 }
 
 export interface ProfileUsage {
-  /** Distinct logins fetched in the last `PROFILE_WINDOW_DAYS`. */
+  /**
+   * Distinct logins seen on **more than one day** inside the window.
+   *
+   * The figure the ceiling in `docs/limits.md` is expressed in. A profile takes
+   * up to a day to start counting, which is the price of not counting a
+   * one-shot lookup as a tenant.
+   */
   active30d: number
+  /**
+   * Distinct logins fetched at all inside the window, one-shot lookups
+   * included. Reported next to `active30d` so the gap between them is visible
+   * rather than hidden inside a definition — a large gap means something is
+   * generating profile lookups nobody asked for.
+   */
+  seen30d: number
   /**
    * When the ledger was last folded, or `null` if it never has been. An
    * instance whose cron is not running reports a timestamp that stops moving,
@@ -156,6 +196,51 @@ async function readLedger(namespace: KVNamespace): Promise<ProfileLedger | null>
     // answer `/health` over it would be the worse failure by a wide margin.
     return null
   }
+}
+
+/**
+ * Every distinct login the cache currently holds an entry for.
+ *
+ * This is the whole mechanism behind the profile count: the service already
+ * stores one entry per login for seven days, so the key listing *is* the list of
+ * logins it has fetched lately, free and already paid for. Nothing is written to
+ * produce it.
+ *
+ * The window is therefore the cache's own — seven days, not thirty. The
+ * thirty-day figure comes from the ledger, which is this listing folded
+ * repeatedly; the two are different questions and the endpoint that serves this
+ * one says so rather than letting a reader assume they match.
+ *
+ * Throws if the namespace does. Callers decide what a partial answer is worth,
+ * and for the rollup it is worth nothing.
+ */
+export async function listCachedLogins(namespace: KVNamespace): Promise<Set<string>> {
+  const logins = new Set<string>()
+  let cursor: string | undefined
+  let pages = 0
+
+  do {
+    const listing: KVNamespaceListResult<unknown, string> = await namespace.list(
+      cursor === undefined ? { prefix: CACHE_KEY_ROOT } : { prefix: CACHE_KEY_ROOT, cursor },
+    )
+
+    for (const key of listing.keys) {
+      const login = loginFromCacheKey(key.name)
+      if (login !== null) logins.add(login)
+    }
+
+    pages += 1
+    cursor = listing.list_complete ? undefined : listing.cursor
+
+    if (cursor !== undefined && pages >= MAX_LIST_PAGES) {
+      // Said out loud rather than silently truncated: a capped listing reports a
+      // smaller number, which reads exactly like a quieter instance.
+      console.warn(`usage: stopped listing after ${pages} pages; the login list is a floor`)
+      cursor = undefined
+    }
+  } while (cursor !== undefined)
+
+  return logins
 }
 
 /**
@@ -178,37 +263,19 @@ export async function rollUpProfiles(
   if (ledger !== null && now - ledger.updatedAt < ROLLUP_INTERVAL_MS) return
 
   const today = dayNumber(now)
-  const seen: Record<string, number> = {}
+  const seen: Record<string, LedgerSpan> = {}
 
   // Carry forward what is still inside the window. Pruning here rather than on
   // read is what stops the record growing without limit on an instance that has
   // served a lot of logins once each.
-  for (const [token, day] of Object.entries(ledger?.seen ?? {})) {
-    if (typeof day === 'number' && today - day < PROFILE_WINDOW_DAYS) seen[token] = day
+  for (const [token, stored] of Object.entries(ledger?.seen ?? {})) {
+    const [first, last] = span(stored)
+    if (Number.isFinite(last) && today - last < PROFILE_WINDOW_DAYS) seen[token] = [first, last]
   }
 
+  let logins: Set<string>
   try {
-    let cursor: string | undefined
-    let pages = 0
-
-    do {
-      const listing: KVNamespaceListResult<unknown, string> = await namespace.list(
-        cursor === undefined ? { prefix: CACHE_KEY_ROOT } : { prefix: CACHE_KEY_ROOT, cursor },
-      )
-
-      for (const key of listing.keys) {
-        const login = loginFromCacheKey(key.name)
-        if (login !== null) seen[fingerprint(login)] = today
-      }
-
-      pages += 1
-      cursor = listing.list_complete ? undefined : listing.cursor
-
-      if (cursor !== undefined && pages >= MAX_LIST_PAGES) {
-        console.warn(`usage: stopped listing after ${pages} pages; active30d is a floor`)
-        cursor = undefined
-      }
-    } while (cursor !== undefined)
+    logins = await listCachedLogins(namespace)
   } catch (error) {
     // A partial listing would write a ledger that had forgotten profiles it
     // could not see, so nothing is written at all and the previous one stands.
@@ -216,6 +283,12 @@ export async function rollUpProfiles(
       `usage: could not list the cache: ${error instanceof Error ? error.message : error}`,
     )
     return
+  }
+
+  for (const login of logins) {
+    const token = fingerprint(login)
+    // First sighting is kept for ever; only the last one moves.
+    seen[token] = [seen[token]?.[0] ?? today, today]
   }
 
   try {
@@ -244,15 +317,21 @@ export async function readProfileUsage(
   now: number = Date.now(),
 ): Promise<ProfileUsage> {
   const ledger = await readLedger(namespace)
-  if (ledger === null) return { active30d: 0, updatedAt: null }
+  if (ledger === null) return { active30d: 0, seen30d: 0, updatedAt: null }
 
   const today = dayNumber(now)
   let active = 0
-  for (const day of Object.values(ledger.seen)) {
-    if (typeof day === 'number' && today - day < PROFILE_WINDOW_DAYS) active += 1
+  let seen = 0
+  for (const stored of Object.values(ledger.seen)) {
+    const [first, last] = span(stored)
+    if (!Number.isFinite(last) || today - last >= PROFILE_WINDOW_DAYS) continue
+    seen += 1
+    // Folded on two different days, so somebody came back for it. One rollup is
+    // a lookup; a card in a README is still there tomorrow.
+    if (last > first) active += 1
   }
 
-  return { active30d: active, updatedAt: ledger.updatedAt }
+  return { active30d: active, seen30d: seen, updatedAt: ledger.updatedAt }
 }
 
 interface RequestTally {

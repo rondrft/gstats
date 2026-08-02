@@ -192,17 +192,33 @@ say what the writes were *for*:
 ```json
 "status": "warning",
 "writes":   { "used": 831, "limit": 1000, "percent": 83 },
-"profiles": { "active30d": 187, "updatedAt": 1785312000000 },
+"profiles": { "active30d": 187, "seen30d": 203, "updatedAt": 1785312000000 },
 "requests": { "last7d": 24019 }
 ```
 
 `writes` is the ceiling; `profiles.active30d` is the number the ceiling is
 *expressed in*, and until it existed the answer to "how far along are we?" was a
-guess. It counts distinct logins fetched in the last thirty days — an instance
-that served somebody once in April is not carrying them in July. `requests` is
-what separates two hundred profiles nobody looks at from twenty in busy READMEs,
-and is also the reading against the other free-plan ceiling, 100,000 Worker
-invocations a day.
+guess.
+
+**`active30d` and `seen30d` are not the same question, and the gap between them
+is a diagnostic in its own right.** `seen30d` is every login fetched at all in
+the window. `active30d` counts only those folded on more than one day — which is
+what "active" has meant in this document from the beginning: a profile somebody
+is loading often enough that its entry is refetched as soon as it goes stale,
+four misses a day, which is where every figure above comes from. A login looked
+up once costs one write in its life and is not a tenant.
+
+A wide gap means something is generating profile lookups nobody asked for. That
+is not hypothetical: the landing page's generator used to repaint its preview on
+every keystroke, so one visitor typing a login fetched a card for every prefix of
+it — and most prefixes of a real login are real logins, so they cached, cost
+GitHub queries and cost writes. It read as 35 profiles on an instance serving
+fewer than ten people. See
+[decisions.md](decisions.md#the-generator-debounces-its-preview-because-a-keystroke-was-a-card-request).
+
+`requests` is what separates two hundred profiles nobody looks at from twenty in
+busy READMEs, and is also the reading against the other free-plan ceiling,
+100,000 Worker invocations a day.
 
 Two things to know before quoting either. `profiles.updatedAt` is when the
 rollup last ran; if it stops moving, the cron has stopped and the count is
@@ -210,6 +226,10 @@ frozen rather than falling — the same signal `warming.lastRun` carries.
 `requests.last7d` is a floor, for exactly the reasons the write count is: an
 isolate recycled before it flushes takes its pending count with it, so a quiet
 instance under-reports, which is where it matters least.
+
+To see *which* logins rather than how many — the ledger is hashed and cannot
+tell you — there is `GET /profiles` behind `PURGE_TOKEN`, which reads the cache
+listing directly. Its window is the cache's seven days, not thirty.
 
 Neither figure involves anything about a visitor. See the privacy note in the
 [README](../README.md#what-this-service-records).

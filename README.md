@@ -292,6 +292,16 @@ than the abuse it prevents](docs/pending.md).
 - **How many cards were served in the last 7 days**, as one total per day. Not
   per profile, not per reader — one integer.
 
+Separately, and worth stating because "nothing is stored" would otherwise be
+doing too much work: **a card is cached under the login it is for, for seven
+days.** That is the cache, not a metric — it is how the service avoids asking
+GitHub the same question twice — but it does mean the instance's operator can
+list which logins have been requested lately, and there is an endpoint behind
+their token that does exactly that. It carries no timestamps, no counts and
+nothing about who asked; it is the set of logins with a live cache entry. An
+operator could always read this out of the storage directly, so the endpoint
+adds convenience rather than access.
+
 See [docs/limits.md](docs/limits.md) for the arithmetic these two figures feed,
 and
 [docs/decisions.md](docs/decisions.md#the-profile-count-is-read-out-of-the-cache-not-counted-on-the-way-in)

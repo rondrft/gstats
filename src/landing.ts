@@ -514,11 +514,48 @@ ${THEME_NAMES.map(
     );
   }
 
+  /**
+   * How long the username field has to be quiet before the preview refetches.
+   *
+   * Repainting the preview is a card request, and an 'input' event fires on every
+   * keystroke — so typing a login used to fetch a card for every prefix of it.
+   * That is not a rounding error: most prefixes of a real login are themselves
+   * real logins, so each one became a cache entry, three to five GitHub queries
+   * and a KV write, on the scarcest resource this service has, for a profile
+   * nobody had asked for. The prefixes that are not real accounts were upstream
+   * 404s instead — cheaper, and still spending a shared quota on nothing.
+   *
+   * Long enough to sit through ordinary typing, short enough that the preview
+   * still feels attached to the controls.
+   */
+  var PREVIEW_DEBOUNCE_MS = 500;
+  var previewTimer = null;
+  var previewSrc = null;
+
+  function repaintPreview(path) {
+    // The colour pickers fire 'input' continuously while being dragged, and
+    // colours are not in the cache key — every step of a drag was a request for
+    // a card the service had already drawn. Nothing is refetched for a URL that
+    // is already on screen.
+    if (path === previewSrc) return;
+    previewSrc = path;
+    preview.src = path;
+  }
+
+  /**
+   * The snippet is text and costs nothing, so it stays instant. Only the
+   * preview waits, which is the only part of this that is a request.
+   */
   function render() {
     var path = build();
-    preview.src = path;
     var username = value('username').trim() || '${DEMO_USER}';
     snippet.value = snippetFor(origin + path, username);
+
+    if (previewTimer !== null) clearTimeout(previewTimer);
+    previewTimer = setTimeout(function () {
+      previewTimer = null;
+      repaintPreview(path);
+    }, PREVIEW_DEBOUNCE_MS);
   }
 
   // Repaint the colour pickers from the theme, so an override is always

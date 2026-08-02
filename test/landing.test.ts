@@ -218,3 +218,126 @@ describe('visual structure', () => {
     expect(page).toContain('<code>cache_seconds</code>')
   })
 })
+
+/**
+ * The generator repaints the preview by assigning to an `<img>` src, and that
+ * is a card request. `input` fires on every keystroke, so typing a login used to
+ * fetch a card for every prefix of it — and most prefixes of a real login are
+ * themselves real logins, so each one became a cache entry, three to five GitHub
+ * queries and a KV write against the scarcest resource the service has.
+ *
+ * A textual assertion would not catch this coming back, so the script is run.
+ */
+describe('the preview does not fire on every keystroke', () => {
+  interface Fired {
+    srcWrites: string[]
+    type: (text: string) => void
+    advance: (ms: number) => void
+  }
+
+  function run(): Fired {
+    const srcWrites: string[] = []
+    const handlers: Record<string, ((event: unknown) => void)[]> = {}
+    let clock = 0
+    const timers: { at: number; id: number; run: () => void }[] = []
+    let nextTimer = 1
+
+    const node = (id: string) => {
+      const self: Record<string, unknown> = {
+        value: id === 'username' ? 'rondrft' : id === 'langs_count' ? '4' : '',
+        checked: id !== 'credit' && id !== 'bars',
+        addEventListener: (type: string, fn: (event: unknown) => void) => {
+          if (id !== 'controls') return
+          handlers[type] ??= []
+          handlers[type].push(fn)
+        },
+        querySelectorAll: () => [],
+        getAttribute: () => null,
+        closest: () => null,
+      }
+      if (id === 'card') self.value = 'terminal'
+      if (id === 'theme') self.value = 'phosphor'
+      if (id === 'locale') self.value = 'en'
+      if (id === 'lang_mode') self.value = 'bytes'
+      if (['ring', 'accent', 'bg'].includes(id)) self.value = '#000000'
+      if (id === 'preview') {
+        Object.defineProperty(self, 'src', {
+          set: (next: string) => srcWrites.push(next),
+          get: () => srcWrites.at(-1) ?? '',
+        })
+      }
+      return self
+    }
+
+    const cache = new Map<string, unknown>()
+    const documentStub = {
+      getElementById: (id: string) => {
+        if (!cache.has(id)) cache.set(id, node(id))
+        return cache.get(id)
+      },
+    }
+
+    const setTimeoutStub = (fn: () => void, ms: number) => {
+      const id = nextTimer++
+      timers.push({ at: clock + ms, id, run: fn })
+      return id
+    }
+    const clearTimeoutStub = (id: number) => {
+      const index = timers.findIndex((timer) => timer.id === id)
+      if (index >= 0) timers.splice(index, 1)
+    }
+
+    new Function('document', 'setTimeout', 'clearTimeout', script)(
+      documentStub,
+      setTimeoutStub,
+      clearTimeoutStub,
+    )
+
+    return {
+      srcWrites,
+      type: (text: string) => {
+        const field = documentStub.getElementById('username') as { value: string }
+        field.value = text
+        for (const fn of handlers.input ?? []) fn({})
+      },
+      advance: (ms: number) => {
+        clock += ms
+        // Only the due ones. Draining the whole queue would fire the pending
+        // debounce early and the test would pass on a page that never debounced.
+        const due = timers.filter((timer) => timer.at <= clock)
+        for (const timer of due) timers.splice(timers.indexOf(timer), 1)
+        for (const timer of due) timer.run()
+      },
+    }
+  }
+
+  it('collapses a typed login into one request instead of one per prefix', () => {
+    const page = run()
+
+    // What a visitor typing "bautista-diaz" produced: b, ba, bau, ...
+    const login = 'bautista-diaz'
+    for (let cut = 1; cut <= login.length; cut += 1) {
+      page.type(login.slice(0, cut))
+      page.advance(120) // faster than the debounce, as typing is
+    }
+
+    expect(page.srcWrites).toHaveLength(0)
+
+    page.advance(1000)
+    expect(page.srcWrites).toHaveLength(1)
+    expect(page.srcWrites[0]).toContain(`username=${login}`)
+  })
+
+  /** Colours are not in the cache key, so redrawing for one is a wasted call. */
+  it('does not refetch a card it is already showing', () => {
+    const page = run()
+
+    page.type('octocat')
+    page.advance(1000)
+    expect(page.srcWrites).toHaveLength(1)
+
+    page.type('octocat')
+    page.advance(1000)
+    expect(page.srcWrites).toHaveLength(1)
+  })
+})

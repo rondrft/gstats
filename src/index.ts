@@ -14,17 +14,18 @@
  * The limits cover `/api` alone. `/health` and the landing page are cheap and
  * are what somebody diagnosing a throttled instance will reach for; `/purge`
  * carries its own per-token brake and is called by its owner's CI, which an
- * address-based limit would throttle for no benefit.
+ * address-based limit would throttle for no benefit. `/profiles` is behind the
+ * same token as `/purge` and answers `404` without it.
  */
 
 import { brandAsset } from './brand'
 import { DEFAULT_DAILY_WRITE_BUDGET, readWriteBudget } from './budget'
-import { KvRateLimitStore, KvStatsCache } from './cache'
+import { CACHE_ENTRY_DAYS, KvRateLimitStore, KvStatsCache } from './cache'
 import { GitHubClient, StaticTokenProvider } from './github/client'
 import { StatsError } from './github/types'
 import { landingPage } from './landing'
 import { LIMITS, parseParams, type StyleParams } from './params'
-import { handlePurge, KvPurgeLimiter } from './purge'
+import { handlePurge, isOperator, KvPurgeLimiter } from './purge'
 import {
   checkRateLimits,
   DEFAULT_PROFILES_PER_HOUR,
@@ -36,7 +37,13 @@ import {
 import { renderCard } from './render/cards'
 import { ERROR_CACHE_SECONDS, type ErrorCardKind, renderErrorCard } from './render/error-card'
 import { type CacheStatus, getStats } from './stats'
-import { readProfileUsage, readRequestUsage, recordRequest, rollUpProfiles } from './usage'
+import {
+  listCachedLogins,
+  readProfileUsage,
+  readRequestUsage,
+  recordRequest,
+  rollUpProfiles,
+} from './usage'
 import { KvWarmStore, parseWarmUsers, warmUsers } from './warm'
 
 export interface Env {
@@ -150,6 +157,8 @@ export default {
         return handleCard(request, url, env)
       case '/health':
         return handleHealth(env)
+      case '/profiles':
+        return handleProfiles(request, env)
       default: {
         // Icons, which are constants rather than anything derived from a
         // request. Checked before the 404 rather than listed as cases so that
@@ -408,7 +417,16 @@ async function handleHealth(env: Env): Promise<Response> {
       // Nothing about a visitor is recorded to produce it; see src/usage.ts.
       // `updatedAt` is null until the cron has folded the ledger once, and stops
       // moving if the cron stops — the same signal `warming.lastRun` carries.
-      profiles: { active30d: profiles.active30d, updatedAt: profiles.updatedAt },
+      // `active30d` counts logins seen on more than one day, which is what
+      // docs/limits.md means by active — a profile somebody keeps loading, at
+      // four misses a day. `seen30d` counts every login fetched at all. A wide
+      // gap between them means something is generating lookups nobody asked
+      // for, which is how the landing page's per-keystroke preview was found.
+      profiles: {
+        active30d: profiles.active30d,
+        seen30d: profiles.seen30d,
+        updatedAt: profiles.updatedAt,
+      },
       // Card requests over the last week, which is a floor: an isolate recycled
       // before it flushes takes its pending count with it.
       requests: { last7d: requests.last7d },
@@ -422,6 +440,46 @@ async function handleHealth(env: Env): Promise<Response> {
       },
     },
     { headers: { 'cache-control': 'no-store' } },
+  )
+}
+
+/**
+ * The logins the cache currently holds, for whoever runs the instance.
+ *
+ * `/health` answers "how many", which is the capacity question and needs no
+ * identities — so the ledger behind it stores hashes and cannot answer this one.
+ * This is the other question, "which", and it exists because looking at real
+ * profiles is how edge cases get found. It is derived from the key listing, live,
+ * rather than from the ledger: the keys carry the login in clear for the seven
+ * days an entry lives, so nothing new is stored to serve this and the ledger
+ * stays hashed.
+ *
+ * **The window is the cache's seven days, not the ledger's thirty**, and the
+ * response says so rather than letting the two be confused.
+ *
+ * Behind the operator token, and a 404 without it — an endpoint that answers
+ * `401` tells an anonymous caller that a list of users exists here.
+ */
+async function handleProfiles(request: Request, env: Env): Promise<Response> {
+  if (!isOperator(request.headers.get('authorization'), env.PURGE_TOKEN)) {
+    return new Response('not found', { status: 404 })
+  }
+
+  let logins: string[]
+  try {
+    logins = [...(await listCachedLogins(env.STATS_CACHE))].sort()
+  } catch (error) {
+    return json({ error: `could not list the cache: ${String(error)}` }, 503)
+  }
+
+  return json(
+    {
+      window: `logins with a cache entry now, which is the last ${CACHE_ENTRY_DAYS} days`,
+      note: 'not the same set as profiles.active30d at /health, which is folded over 30 days and counts only logins seen on more than one day',
+      count: logins.length,
+      logins,
+    },
+    200,
   )
 }
 

@@ -79,6 +79,22 @@ export async function handlePurge(request: PurgeRequest): Promise<PurgeOutcome> 
   return { status: 200, body: { purged, username: username.toLowerCase() } }
 }
 
+/**
+ * Whether a request carries the instance's operator token.
+ *
+ * Shared with `GET /profiles`, which is the other endpoint only the operator
+ * has any business calling. Reusing one secret for both is deliberate rather
+ * than lazy: whoever holds `PURGE_TOKEN` is running the instance, and anybody
+ * running the instance can already read every key in its namespace with
+ * `wrangler kv key list`. A second token would suggest a boundary that does not
+ * exist.
+ */
+export function isOperator(authorization: string | null, secret: string | undefined): boolean {
+  if (secret === undefined || secret.length === 0) return false
+  const presented = bearer(authorization)
+  return presented !== null && timingSafeEqual(presented, secret)
+}
+
 function bearer(header: string | null): string | null {
   if (header === null) return null
   const match = /^Bearer\s+(\S+)$/i.exec(header.trim())

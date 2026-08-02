@@ -1,4 +1,6 @@
+import { env } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
+import worker, { type Env } from '../src/index'
 import {
   DEFAULT_EXCLUDED,
   MIN_SHARE,
@@ -9,6 +11,7 @@ import {
   recencyWeight,
   sampleRepos,
 } from '../src/languages'
+import { stubGitHub } from './helpers/github-stub'
 
 const NOW = Date.parse('2026-07-27T00:00:00Z')
 
@@ -413,3 +416,40 @@ const titleCase = (value: string) =>
     .split(' ')
     .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ')
+
+/**
+ * The card is a promise about public work, and the query is where that promise
+ * is actually kept.
+ *
+ * This matters most for something that does not exist yet. A GitHub App
+ * installation token can reach whatever repositories the installer granted it,
+ * including private ones — so on the day authentication changes, the difference
+ * between "the App is a quota improvement nobody can see" and "installing the
+ * App silently publishes your private language breakdown to every reader of
+ * your README" is this one line of the query. The README calls giving the
+ * shared token private access "a leak wearing a feature's clothes"; the
+ * self-inflicted version is the same leak and harder to notice.
+ *
+ * So it is pinned here rather than left as a property of whichever credential
+ * happens to be in use. See docs/decisions.md.
+ */
+describe('the repositories query', () => {
+  it('asks for public, owned, non-forked repositories and nothing else', async () => {
+    const github = stubGitHub()
+
+    await worker.fetch(
+      new Request('https://stats.example.com/api?username=querypin'),
+      env as unknown as Env,
+    )
+
+    const bodies = github.fetch.mock.calls.map(
+      (call) => (JSON.parse(String((call[1] as RequestInit).body)) as { query: string }).query,
+    )
+    const languages = bodies.find((query) => query.includes('repositories('))
+    expect(languages).toBeDefined()
+
+    expect(languages).toContain('privacy: PUBLIC')
+    expect(languages).toContain('ownerAffiliations: OWNER')
+    expect(languages).toContain('isFork: false')
+  })
+})

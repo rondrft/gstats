@@ -292,13 +292,28 @@ plan's thousand a day unless you say otherwise, so on Workers Paid set
 `KV_WRITE_BUDGET` to `1000000` or the percentage will describe a limit you do
 not have.
 
-**`profiles.active30d` is where on that scale you are.** Distinct logins fetched
-in the last thirty days, which is the unit the ceiling in
+**`profiles.active30d` is where on that scale you are.** Logins fetched on more
+than one day in the last thirty, which is the unit the ceiling in
 [limits.md](limits.md#when-to-move-to-the-paid-plan) is expressed in: about 236
 in steady state, and **about 150 in practice**, because a deploy retires every
 cache entry and so costs one extra write per active profile. That document has
 the table. `requests.last7d` is what the profiles are costing in Worker
 invocations, against a free-plan allowance of 100,000 a day.
+
+`seen30d` beside it counts every login fetched at all, one-shot lookups
+included. **Watch the gap.** A large one means something is asking for profiles
+nobody embedded — a scraper, or your own tooling. To see which logins rather
+than how many:
+
+```bash
+curl -s -H "Authorization: Bearer $PURGE_TOKEN" https://<host>/profiles | jq .logins
+```
+
+That reads the cache listing directly, so its window is the seven days an entry
+lives rather than the ledger's thirty, and it needs `PURGE_TOKEN` — the same
+token as `/purge`, because anybody who can run `wrangler kv key list` on the
+namespace can already read it. Without the token it answers `404` rather than
+`401`, so an anonymous caller is not told the endpoint exists.
 
 Both are gathered without recording anything about a visitor — the profile count
 is folded out of the cache's own key listing by the cron rather than counted per

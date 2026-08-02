@@ -27,6 +27,12 @@ Committed but not yet deployed.
 
 ### Added
 
+- **`GET /profiles`**, behind `PURGE_TOKEN`, listing which logins the cache is
+  holding. `/health` says how many and its ledger is hashed, so it structurally
+  cannot say which; this reads the cache key listing directly and stores nothing
+  new to do it. Its window is the cache's seven days rather than the ledger's
+  thirty, and it says so in the response. Without the token it answers `404`
+  rather than `401`, so nothing tells an anonymous caller the endpoint is there.
 - **`/health` says how many distinct profiles the instance is carrying**, as
   `profiles.active30d`, next to `requests.last7d`. The ceiling in
   [docs/limits.md](docs/limits.md) has always been expressed in active profiles
@@ -69,19 +75,6 @@ Committed but not yet deployed.
   does not recognise falls back to the default rather than erroring. `29d9316`,
   `1e20bba`
 
-### Fixed
-
-- **The KV write counter dropped what it was holding at every UTC midnight.**
-  The tally is keyed by day and a write arriving on a new one replaced it
-  instead of flushing it, so each isolate silently lost up to twenty-four writes
-  a night. This is the figure `status: "warning"` is read off at 80% of the
-  allowance, so the undercount delayed the alert in the one case it exists for.
-  Midnight is now a flush.
-- The package is named `gstats`, which it should have been since the rename. The
-  old name survives on purpose in exactly three places — the second deploy
-  target, the `phosphor` theme and this repository's history — and this was not
-  one of them.
-
 ### Changed
 
 - **Streaks now count against Anywhere on Earth (UTC−12) rather than UTC.** A day
@@ -108,6 +101,29 @@ Committed but not yet deployed.
 
 ### Fixed
 
+- **The landing page's generator fetched a card on every keystroke.** Typing a
+  login into the box requested one for every prefix of it — and most prefixes of
+  a real GitHub login are themselves real logins, so each one cached, cost three
+  to five GraphQL queries and spent a KV write, on the resource this service runs
+  out of first. One visitor typing thirteen characters left eight profiles
+  behind. The preview is now debounced by half a second and will not reload a URL
+  it is already showing, which also stops a colour picker firing a request per
+  step while it is dragged. The snippet still updates instantly.
+- **`profiles.active30d` counted those lookups as tenants.** It now counts only
+  logins seen on more than one day, which is what "active" has meant in
+  [docs/limits.md](docs/limits.md) all along — a profile whose entry is refetched
+  as soon as it goes stale, rather than one somebody typed once. `seen30d` is
+  reported beside it, and the gap between the two is how the bug above was found.
+- **The KV write counter dropped what it was holding at every UTC midnight.**
+  The tally is keyed by day and a write arriving on a new one replaced it
+  instead of flushing it, so each isolate silently lost up to twenty-four writes
+  a night. This is the figure `status: "warning"` is read off at 80% of the
+  allowance, so the undercount delayed the alert in the one case it exists for.
+  Midnight is now a flush.
+- The package is named `gstats`, which it should have been since the rename. The
+  old name survives on purpose in exactly three places — the second deploy
+  target, the `phosphor` theme and this repository's history — and this was not
+  one of them.
 - `card=heatmap` came to 13.5 KB for an account that commits daily, over the
   12 KB budget the tests were meant to enforce. Same grid, drawn in fewer bytes.
   `e7c4ca0`

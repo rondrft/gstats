@@ -70,6 +70,13 @@ export const KV_FRESH_SECONDS = 6 * 60 * 60
  */
 const KV_EXPIRE_SECONDS = 7 * 24 * 60 * 60
 
+/**
+ * The same figure in days, for the places that have to describe it rather than
+ * enforce it — `GET /profiles` reports the window it can honestly speak for,
+ * and that window is this one.
+ */
+export const CACHE_ENTRY_DAYS = KV_EXPIRE_SECONDS / 86_400
+
 export interface CacheEntry {
   data: StatsData
   /** Epoch milliseconds at which the entry stops being considered fresh. */
