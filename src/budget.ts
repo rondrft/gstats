@@ -24,7 +24,9 @@
  *     the same total and overwrite each other. The figure is a floor, not an
  *     audit. For "am I about to run out?" a floor is the useful direction to be
  *     wrong in only if it is not wrong by much, which is why the flush interval
- *     is small rather than merely large enough to be cheap.
+ *     is small rather than merely large enough to be cheap — and why the UTC
+ *     boundary flushes what it is holding rather than starting the new day over
+ *     the old one, which was a second, avoidable source of the same error.
  *   - **Deletes are not counted.** Cloudflare bills them against a separate
  *     daily allowance, so folding them in here would misreport the one figure
  *     this is about.
@@ -91,7 +93,20 @@ export function forgetWriteTally(): void {
  */
 export async function recordWrite(namespace: KVNamespace, now: number = Date.now()): Promise<void> {
   const day = utcDay(now)
-  if (tally === null || tally.day !== day) tally = { day, pending: 0 }
+
+  // Midnight is a flush, not a reset. Starting the new day's tally over the old
+  // one discarded up to `PERSIST_EVERY - 1` writes per isolate at every UTC
+  // boundary — and this is the counter the 80% warning is read off, so an
+  // undercount there means the alert arrives late in exactly the case it exists
+  // for. The flush counts itself against the day it is closing rather than the
+  // one it happens on; that is one write in the wrong column against the
+  // twenty-four it recovers.
+  if (tally !== null && tally.day !== day) {
+    await flush(namespace, tally)
+    tally = null
+  }
+
+  if (tally === null) tally = { day, pending: 0 }
 
   tally.pending += 1
   if (tally.pending < PERSIST_EVERY) return
@@ -100,6 +115,9 @@ export async function recordWrite(namespace: KVNamespace, now: number = Date.now
 }
 
 async function flush(namespace: KVNamespace, current: Tally): Promise<void> {
+  // Nothing to write, and writing anyway would count a flush that did no work.
+  if (current.pending === 0) return
+
   const key = recordKey(current.day)
 
   try {

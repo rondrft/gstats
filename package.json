@@ -1,8 +1,8 @@
 {
-  "name": "phosphor-stats",
+  "name": "gstats",
   "version": "1.0.0",
   "private": true,
-  "description": "GitHub stats cards rendered as SVG on the edge, in a CRT phosphor palette.",
+  "description": "GitHub stats cards for your README — contributions, streaks and languages, rendered as SVG on the edge.",
   "license": "MIT",
   "type": "module",
   "engines": {

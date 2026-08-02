@@ -406,6 +406,18 @@ Two things are given up deliberately. It **undercounts**: writes held by an
 isolate that dies before it flushes are lost, and two locations flushing at once
 can each read the same total and overwrite each other. It is a floor, not an
 audit, which for "am I about to run out?" is the useful direction to be wrong in.
+
+There was a third source of undercount that was not deliberate at all, and it is
+worth recording because "it is a floor anyway" is exactly the reasoning that let
+it sit there. The tally is keyed by UTC day, and a write arriving on a new day
+**replaced** the tally rather than flushing it — so every isolate silently
+dropped whatever it was holding at midnight, up to twenty-four writes each,
+every night. A floor is only useful if it is not wrong by much, and the
+allowance resets at the same boundary, so the loss landed on the figure at its
+least informative moment and made the 80% warning arrive late in the one case it
+exists for. Midnight is now a flush. The flush counts itself against the day it
+closes rather than the day it happens on, which is one write in the wrong column
+against the twenty-four it recovers.
 And **deletes are not counted**, because Cloudflare bills them against their own
 daily allowance and folding them in would misreport the one figure this is about.
 

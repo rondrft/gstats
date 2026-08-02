@@ -81,6 +81,35 @@ describe('the day’s write count', () => {
     expect((await readWriteBudget(kv, DEFAULT_DAILY_WRITE_BUDGET, day + 86_400_000)).used).toBe(0)
   })
 
+  /**
+   * Midnight used to be a reset rather than a flush, which quietly dropped up
+   * to twenty-four writes per isolate at every UTC boundary. This is the figure
+   * the 80% warning is read off, so undercounting it delays the alert in the one
+   * case it exists for.
+   */
+  it('flushes what it is holding when the day turns over', async () => {
+    const day = nextDay()
+    for (let write = 0; write < 5; write += 1) await recordWrite(kv, day)
+
+    // The write that crosses the boundary closes the old day on its way past.
+    await recordWrite(kv, day + 86_400_000)
+
+    forgetWriteTally()
+    // Five carried over, plus the flush that carried them.
+    expect((await readWriteBudget(kv, DEFAULT_DAILY_WRITE_BUDGET, day)).used).toBe(6)
+  })
+
+  it('does not spend a write closing a day it holds nothing for', async () => {
+    const day = nextDay()
+    // Lands exactly on a flush, so the isolate carries nothing into midnight.
+    for (let write = 0; write < 25; write += 1) await recordWrite(kv, day)
+    await recordWrite(kv, day + 86_400_000)
+
+    forgetWriteTally()
+    // 26 and not 27: crossing the boundary with an empty tally is not an event.
+    expect((await readWriteBudget(kv, DEFAULT_DAILY_WRITE_BUDGET, day)).used).toBe(26)
+  })
+
   it('reports the percentage consumed', async () => {
     const day = nextDay()
     for (let write = 0; write < 100; write += 1) await recordWrite(kv, day)

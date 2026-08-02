@@ -69,6 +69,19 @@ Committed but not yet deployed.
   does not recognise falls back to the default rather than erroring. `29d9316`,
   `1e20bba`
 
+### Fixed
+
+- **The KV write counter dropped what it was holding at every UTC midnight.**
+  The tally is keyed by day and a write arriving on a new one replaced it
+  instead of flushing it, so each isolate silently lost up to twenty-four writes
+  a night. This is the figure `status: "warning"` is read off at 80% of the
+  allowance, so the undercount delayed the alert in the one case it exists for.
+  Midnight is now a flush.
+- The package is named `gstats`, which it should have been since the rename. The
+  old name survives on purpose in exactly three places — the second deploy
+  target, the `phosphor` theme and this repository's history — and this was not
+  one of them.
+
 ### Changed
 
 - **Streaks now count against Anywhere on Earth (UTC−12) rather than UTC.** A day
