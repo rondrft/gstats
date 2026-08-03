@@ -60,9 +60,11 @@ function renderPress(data: CardData, { params, strings }: RenderOptions): string
     height: COLUMN_HEIGHT,
   }))
 
-  const langLines = data.languages
-    .slice(0, 4)
-    .map((language) => `${abbreviate(language.name)} ${Math.round(language.pct * 100)}%`)
+  // Capped by `MAX_LANGUAGES.press` before it gets here, so the column is only
+  // ever asked for as many lines as it has.
+  const langLines = data.languages.map(
+    (language) => `${abbreviate(language.name)} ${Math.round(language.pct * 100)}%`,
+  )
   const langWidth = Math.max(
     54,
     ...langLines.map((line) => textWidth(line, LANG_SIZE)),

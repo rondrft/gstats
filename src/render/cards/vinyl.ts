@@ -171,7 +171,9 @@ function buildTracks(
 
   if (!showLangs) return tracks
 
-  data.languages.slice(0, 3).forEach((language, index) => {
+  // However many arrive is however many side B has room for: the ceiling is
+  // declared as `MAX_LANGUAGES.vinyl` and applied before the card is drawn.
+  data.languages.forEach((language, index) => {
     tracks.push({
       side: `B${index + 1}`,
       title: abbreviate(language.name),

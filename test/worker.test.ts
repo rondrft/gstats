@@ -290,6 +290,59 @@ describe('cards', () => {
     expect(github.calls).toBe(callsAfterFirst)
   })
 
+  /**
+   * A card that lists three languages for `langs_count=6` is indistinguishable
+   * from a service ignoring the parameter, and there is nowhere on the card to
+   * say otherwise: a design is frozen once published and the document has 12 KB
+   * to fit in. So the answer rides on the response, where whoever is building
+   * the URL can see it and a reader is never troubled by it.
+   */
+  it('says what became of langs_count in the headers', async () => {
+    // The stub profile is TypeScript and HTML, and HTML is a by-product
+    // language — so the account has one to give however many are asked for.
+    stubGitHub()
+
+    const response = await get('/api?username=langheaders&langs_count=6')
+
+    expect(response.headers.get('x-languages-shown')).toBe('1')
+    expect(response.headers.get('x-languages-available')).toBe('1')
+    expect(response.headers.get('x-languages-ceiling')).toBe('8')
+  })
+
+  it('distinguishes a design ceiling from a profile with fewer to give', async () => {
+    const languages = ['Rust', 'Go', 'Python', 'Ruby', 'Elixir', 'Nim']
+    stubGitHub({
+      respond: (kind) =>
+        kind === 'languages'
+          ? {
+              data: {
+                user: {
+                  repositories: {
+                    pageInfo: { hasNextPage: false, endCursor: null },
+                    nodes: languages.map((name, index) => ({
+                      pushedAt: null,
+                      primaryLanguage: { name },
+                      languages: { edges: [{ size: 90_000 - index, node: { name, color: null } }] },
+                    })),
+                  },
+                },
+              },
+            }
+          : undefined,
+    })
+
+    const terminal = await get('/api?username=langceiling&langs_count=6')
+    expect(terminal.headers.get('x-languages-available')).toBe('6')
+    expect(terminal.headers.get('x-languages-shown')).toBe('6')
+
+    // Same profile, same request, a design that lists three. The shortfall is
+    // the card's shape rather than the account's, and the headers say which.
+    const vinyl = await get('/api?username=langceiling&card=vinyl&langs_count=6')
+    expect(vinyl.headers.get('x-languages-available')).toBe('6')
+    expect(vinyl.headers.get('x-languages-shown')).toBe('3')
+    expect(vinyl.headers.get('x-languages-ceiling')).toBe('3')
+  })
+
   it('batches every historical year into a single extra request', async () => {
     const github = stubGitHub()
 

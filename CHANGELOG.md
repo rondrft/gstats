@@ -27,6 +27,22 @@ Committed but not yet deployed.
 
 ### Added
 
+- **Every card response says what became of `langs_count`.**
+  `X-Languages-Shown`, `X-Languages-Available` and `X-Languages-Ceiling` — drawn
+  on the card, qualified after the filters, and the most the chosen design
+  draws. A card listing three languages for `langs_count=6` is indistinguishable
+  from a service ignoring the parameter, and there is nowhere on the card to say
+  otherwise: a design is frozen once published and the document has 12 KB to fit
+  in. Between the three headers every shortfall has a stated cause —
+  `available` below what was asked for is the account, `shown` below `available`
+  is the design or the parameter. Camo does not forward them, which is right:
+  they are addressed to whoever is building the URL, not to a reader.
+- **The generator's language count is a dropdown, and it narrows to the design.**
+  It was a free text field, which invites a number the service then clamps in
+  silence — part of why the shortfall above went unnoticed for as long as it did.
+  It offers 1 to 8, drops to the ceiling of whatever design is selected, and the
+  line under it names the other reason a card lists fewer: languages under 0.5%
+  or on the by-product list never reach it.
 - **`GET /profiles`**, behind `PURGE_TOKEN`, listing which logins the cache is
   holding. `/health` says how many and its ledger is hashed, so it structurally
   cannot say which; this reads the cache key listing directly and stores nothing
@@ -101,6 +117,20 @@ Committed but not yet deployed.
 
 ### Fixed
 
+- **Three designs cut the language list without saying so.** `vinyl` drew three
+  and `press` and `gauge` four, whatever `langs_count` asked for, written as a
+  `slice` inside each design where nothing outside it could see the number — so
+  the generator offered eight, the parameter table advertised eight, and
+  `?card=vinyl&langs_count=6` produced three. **No card changes**: the ceilings
+  are part of what those designs look like and they are unchanged down to the
+  byte. They are declared in one place now, applied before a design is called,
+  reported in the response and shown in the generator. Reported as
+  `langs_count` being ignored, which is also how it looks; the ranking honours
+  every value from one to eight and always did.
+- The worst-case card the 12 KB budget is measured against was drawing seven
+  language rows, not eight: its widest fixture language was `Jupyter Notebook`,
+  which the default exclusion list drops before it can be rendered. The same
+  mistake in a different disguise as the one this fixture was written to fix.
 - **The GitHub ceiling in [docs/limits.md](docs/limits.md) was optimistic by
   about a factor of six.** GitHub's allowance is 5,000 points an *hour*; the
   document turned it into 120,000 a day and divided, which assumes a flat rate.

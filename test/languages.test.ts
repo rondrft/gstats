@@ -7,6 +7,7 @@ import {
   type RankOptions,
   REPO_CAP,
   type RepoLanguages,
+  rankAllLanguages,
   rankLanguages,
   recencyWeight,
   sampleRepos,
@@ -317,12 +318,40 @@ describe('degenerate input', () => {
     expect(rank([repo('empty', []), repo('also-empty', [])])).toEqual([])
   })
 
-  it('honours the limit', () => {
-    const repos = ['Rust', 'Go', 'Python', 'Ruby', 'Zig'].map((language, index) =>
-      repo(`r${index}`, [[language, 1000 - index]]),
+  /**
+   * Every value `langs_count` accepts, against an account with more languages
+   * than the largest of them. The ranking was never the thing cutting the list
+   * short — a design was — but nothing here said so at more than one value, and
+   * "the parameter is being clamped somewhere" was the first suspicion when a
+   * card drew three languages for `langs_count=6`.
+   */
+  it('honours the limit at every value the parameter accepts', () => {
+    const repos = ['Rust', 'Go', 'Python', 'Ruby', 'Zig', 'Nim', 'Elixir', 'Lua', 'Perl'].map(
+      (language, index) => repo(`r${index}`, [[language, 1000 - index]]),
     )
 
-    expect(rank(repos, { limit: 3 })).toHaveLength(3)
+    for (const limit of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      expect(rank(repos, { limit })).toHaveLength(limit)
+    }
+  })
+
+  /**
+   * What the limit is applied to, and the number `/api` reports as
+   * `X-Languages-Available`: asking for more than an account has is not the
+   * same failure as asking for more than a design draws, and the two are
+   * indistinguishable from the card alone.
+   */
+  it('ranks everything that qualifies when no limit is applied', () => {
+    const repos = ['Rust', 'Go', 'Python'].map((language, index) =>
+      repo(`r${index}`, [[language, 1000 - index]]),
+    )
+    const sample = sampleRepos(repos, NOW)
+    const options = { mode: 'bytes', exclude: [], include: [] } as const
+
+    expect(rankAllLanguages(sample, options)).toHaveLength(3)
+    expect(rankLanguages(sample, { ...options, limit: 8 })).toEqual(
+      rankAllLanguages(sample, options),
+    )
   })
 })
 

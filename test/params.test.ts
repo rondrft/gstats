@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { DEFAULTS, parseParams } from '../src/params'
+import { DEFAULTS, LIMITS, parseParams } from '../src/params'
+import { LANGS_CEILING, MAX_LANGUAGES } from '../src/render/cards/registry'
 
 function parse(query: string) {
   return parseParams(new URLSearchParams(query))
@@ -114,6 +115,25 @@ describe('numeric parameters', () => {
     expect(parseOk('username=x&langs_count=0').langsCount).toBe(1)
     expect(parseOk('username=x&cache_seconds=1').maxAgeOverride).toBe(1800)
     expect(parseOk('username=x&cache_seconds=999999').maxAgeOverride).toBe(86400)
+  })
+
+  /**
+   * The accepted range is the largest ceiling any design has, so that a value
+   * the parser lets through is one some card can honour. The generator now only
+   * offers these, which is the point: a free text field accepted anything and
+   * the difference between "clamped" and "this design draws fewer" was invisible.
+   */
+  it('takes every value in the range and clamps to the largest design ceiling', () => {
+    expect(LIMITS.langsCount.max).toBe(LANGS_CEILING)
+    expect(LANGS_CEILING).toBe(Math.max(...Object.values(MAX_LANGUAGES)))
+
+    for (let count = LIMITS.langsCount.min; count <= LIMITS.langsCount.max; count += 1) {
+      expect(parseOk(`username=x&langs_count=${count}`).langsCount).toBe(count)
+    }
+
+    expect(parseOk(`username=x&langs_count=${LIMITS.langsCount.max + 1}`).langsCount).toBe(
+      LIMITS.langsCount.max,
+    )
   })
 
   it('falls back to the default when the value is not a number', () => {

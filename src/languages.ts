@@ -115,10 +115,14 @@ export interface SampledRepo {
   e: [number, number][]
 }
 
-export interface RankOptions {
-  mode: LangMode
+export interface RankOptions extends FilterOptions {
   /** How many entries to return. */
   limit: number
+}
+
+/** Everything that decides *which* languages qualify, before any count. */
+export interface FilterOptions {
+  mode: LangMode
   /** Lowercased names the caller wants removed, on top of the defaults. */
   exclude: readonly string[]
   /** Lowercased names the caller wants re-admitted from the defaults. */
@@ -180,7 +184,7 @@ export function recencyWeight(pushedAt: string | null, now: number): number {
 }
 
 /** The set of languages to drop, after the caller's additions and rescues. */
-function excludedSet(options: RankOptions): Set<string> {
+function excludedSet(options: FilterOptions): Set<string> {
   const excluded = new Set<string>(DEFAULT_EXCLUDED)
   for (const name of options.include) excluded.delete(name.toLowerCase())
   for (const name of options.exclude) excluded.add(name.toLowerCase())
@@ -188,6 +192,20 @@ function excludedSet(options: RankOptions): Set<string> {
 }
 
 export function rankLanguages(sample: RepoSample, options: RankOptions): LanguageStat[] {
+  return rankAllLanguages(sample, options).slice(0, options.limit)
+}
+
+/**
+ * The same ranking with no count applied: every language that qualifies.
+ *
+ * The length of this is the honest answer to "why did asking for six give me
+ * three?", and it is why the limit is a separate step rather than part of the
+ * ranking. Nothing here is ever *more* than a card draws — a profile whose
+ * remaining languages are on the by-product list or under half a per cent has
+ * fewer to give, and until this was measurable the caller had no way to tell
+ * that apart from a service that was ignoring them.
+ */
+export function rankAllLanguages(sample: RepoSample, options: FilterOptions): LanguageStat[] {
   const excluded = excludedSet(options)
   // Exclusion is decided once per language rather than once per edge: the same
   // few dozen names are referenced thousands of times.
@@ -208,7 +226,6 @@ export function rankLanguages(sample: RepoSample, options: RankOptions): Languag
     }))
     .filter((language) => language.pct >= MIN_SHARE)
     .sort((a, b) => b.size - a.size || a.name.localeCompare(b.name))
-    .slice(0, options.limit)
 }
 
 /**

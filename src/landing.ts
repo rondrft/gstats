@@ -14,7 +14,8 @@
  * layers from interfering.
  */
 
-import { CARD_IDS, DEFAULT_CARD } from './render/cards/registry'
+import { DEFAULTS } from './params'
+import { CARD_IDS, DEFAULT_CARD, LANGS_CEILING, MAX_LANGUAGES } from './render/cards/registry'
 import { THEME_NAMES, THEMES } from './render/themes'
 import { SERVICE_NAME } from './service'
 
@@ -64,7 +65,11 @@ const REFERENCE: [name: string, values: string, fallback: string][] = [
   ['border', 'hex, or none to hide the frame', 'theme'],
   ['radius', 'corner radius, 0 to 24', '6'],
   ['hide', 'total, streak, best, langs — comma separated', 'nothing hidden'],
-  ['langs_count', 'how many languages to list, 1 to 8', '4'],
+  [
+    'langs_count',
+    `at most this many languages, 1 to ${LANGS_CEILING} — some designs list fewer, and so does a profile with fewer to list`,
+    String(DEFAULTS.langsCount),
+  ],
   ['lang_mode', 'bytes, or repos to count what each language leads', 'bytes'],
   ['exclude_langs', 'languages to drop, comma separated', 'none'],
   ['include_langs', 'bring back HTML, CSS, Shell and the rest', 'none'],
@@ -194,6 +199,10 @@ export function landingPage(origin: string): string {
     font-family: var(--mono);
     font-size: 13px;
   }
+
+  /* Under a control, in the label's own voice: it is saying what the control
+     cannot promise, not adding a second thing to read. */
+  .hint { font-size: 10px; color: var(--muted); margin: .25rem 0 0; line-height: 1.4; }
 
   .colors { display: grid; grid-template-columns: repeat(3, 1fr); gap: .4rem; }
   .colors label { text-align: center; margin: .25rem 0 0; font-size: 10px; }
@@ -330,9 +339,21 @@ ${THEME_NAMES.map((name) => `          <option value="${name}">${name}</option>`
           <option value="repos">repos</option>
         </select>
       </div>
+      <!-- A dropdown rather than a text field, because every value it can offer
+           is one the service will honour. The free field accepted anything and
+           the service clamped the rest in silence, which is part of why a card
+           drawing three languages for langs_count=6 read as a bug rather than
+           as a design's ceiling. -->
       <div>
         <label for="langs_count">languages shown</label>
-        <input type="text" id="langs_count" value="4" inputmode="numeric">
+        <select id="langs_count">
+${Array.from(
+  { length: LANGS_CEILING },
+  (_, index) =>
+    `          <option value="${index + 1}"${index + 1 === DEFAULTS.langsCount ? ' selected' : ''}>${index + 1}</option>`,
+).join('\n')}
+        </select>
+        <p class="hint" id="langs_hint"></p>
       </div>
       <div>
         <label>modules</label>
@@ -441,6 +462,8 @@ ${THEME_NAMES.map(
   var snippet = document.getElementById('snippet');
   var formats = document.getElementById('formats');
   var copy = document.getElementById('copy');
+  var langsCount = document.getElementById('langs_count');
+  var langsHint = document.getElementById('langs_hint');
 
   // Which of the two forms the box is showing. HTML is the default because it is
   // the one that carries a link; markdown is the same card with nothing round it.
@@ -450,8 +473,43 @@ ${THEME_NAMES.map(
   // parameters is harder to read and harder to hand-edit later.
   var THEME_COLORS = ${JSON.stringify(themeColorDefaults())};
 
+  // What each design will actually draw. Three of them stop below the eight the
+  // parameter accepts, and until this was here the only way to find that out was
+  // to ask for six and count three.
+  var LANG_CEILINGS = ${JSON.stringify(MAX_LANGUAGES)};
+  var LANGS_DEFAULT = ${DEFAULTS.langsCount};
+
   function value(id) { return document.getElementById(id).value; }
   function checked(id) { return document.getElementById(id).checked; }
+
+  /**
+   * Narrows the count to what the chosen design draws, and says so underneath.
+   *
+   * Two different shortfalls end in the same card, and the hint has to cover
+   * both: this design lists fewer than eight, and this profile has fewer than
+   * eight to list. The second one is the common case — a language on the
+   * by-product list or under half a per cent never reaches the card — and it is
+   * the one nothing anywhere used to mention.
+   */
+  function syncLangs() {
+    var ceiling = LANG_CEILINGS[value('card')];
+    var options = langsCount.querySelectorAll('option');
+    for (var index = 0; index < options.length; index++) {
+      // Both, because hiding an option is not honoured everywhere; disabling it
+      // is, so an unreachable value is unreachable even where it still shows.
+      var beyond = Number(options[index].value) > ceiling;
+      options[index].hidden = beyond;
+      options[index].disabled = beyond;
+    }
+
+    langsCount.disabled = ceiling === 0;
+    if (ceiling > 0 && Number(langsCount.value) > ceiling) langsCount.value = String(ceiling);
+
+    langsHint.textContent = ceiling === 0
+      ? 'this design draws no languages'
+      : 'at most ' + ceiling + ' here. A profile shows fewer when the rest are '
+        + 'under 0.5% or on the by-product list — include_langs brings those back.';
+  }
 
   function build() {
     var username = value('username').trim() || '${DEMO_USER}';
@@ -482,8 +540,13 @@ ${THEME_NAMES.map(
     if (checked('credit')) params.push('show_credit=true');
     if (checked('bars')) params.push('lang_style=bars');
 
+    // Omitted when it is what this design would do anyway — which on a design
+    // whose ceiling is below the default is the ceiling, not the default.
+    var ceiling = LANG_CEILINGS[value('card')];
     var count = parseInt(value('langs_count'), 10);
-    if (count >= 1 && count <= 8 && count !== 4) params.push('langs_count=' + count);
+    if (ceiling > 0 && count >= 1 && count <= ceiling && count !== Math.min(LANGS_DEFAULT, ceiling)) {
+      params.push('langs_count=' + count);
+    }
 
     return '/api?' + params.join('&');
   }
@@ -547,6 +610,10 @@ ${THEME_NAMES.map(
    * preview waits, which is the only part of this that is a request.
    */
   function render() {
+    // Before the URL is built, so a design change that lowers the ceiling is
+    // reflected in the snippet on the same pass rather than one behind.
+    syncLangs();
+
     var path = build();
     var username = value('username').trim() || '${DEMO_USER}';
     snippet.value = snippetFor(origin + path, username);

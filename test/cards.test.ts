@@ -1,10 +1,28 @@
 import { describe, expect, it } from 'vitest'
-import { CARD_IDS, DEFAULT_CARD, renderCard, resolveRenderer } from '../src/render/cards'
+import {
+  CARD_IDS,
+  DEFAULT_CARD,
+  MAX_LANGUAGES,
+  renderCard,
+  renderCardWithLanguages,
+  resolveRenderer,
+} from '../src/render/cards'
 import { SERVICE_NAME } from '../src/service'
 import { calendarFixture, paramsFixture, statsFixture } from './helpers/fixtures'
 
 const SIZE_BUDGET = 12 * 1024
 const byteLength = (svg: string) => new TextEncoder().encode(svg).length
+
+/**
+ * Language rows actually drawn, counted the one way that works for all six.
+ *
+ * Every design prints exactly one percentage per language and no percentage
+ * anywhere else — the tracklist, the panel and the single-line summary all
+ * differ in markup and agree on that. The premise is held by a test below
+ * rather than assumed, because the whole point of counting is to catch a design
+ * drawing a different number from the one it reports.
+ */
+const drawnLanguages = (svg: string) => (svg.match(/%/g) ?? []).length
 
 const render = (query: string) => renderCard(statsFixture(), paramsFixture(query))
 const widthOf = (svg: string) => Number(/ width="(\d+)"/.exec(svg)?.[1] ?? 0)
@@ -22,6 +40,12 @@ const widthOf = (svg: string) => Number(/ width="(\d+)"/.exec(svg)?.[1] ?? 0)
  *
  * Everything is at the end of its range here at once: a full year with no gaps,
  * six-figure numbers, a long display name and eight languages to list.
+ *
+ * The eight have to be eight the ranking will actually return. The widest
+ * abbreviation here used to belong to `Jupyter Notebook`, which is on the
+ * default exclusion list — so the largest card was drawing seven rows and this
+ * budget was measured against a language block one line shorter than the one
+ * that ships. `Swift` abbreviates to the same five cells and survives.
  */
 const WORST_CASE = statsFixture({
   name: 'A Person With An Extremely Long Display Name Indeed',
@@ -38,7 +62,7 @@ const WORST_CASE = statsFixture({
     counts: Array.from({ length: 371 }, (_, index) => 1 + ((index * 7) % 23)),
   },
   languages: [
-    { name: 'Jupyter Notebook', color: '#DA5B0B', size: 900_000, pct: 0.22 },
+    { name: 'Swift', color: '#F05138', size: 900_000, pct: 0.22 },
     { name: 'TypeScript', color: '#3178c6', size: 800_000, pct: 0.2 },
     { name: 'Objective-C++', color: '#6866fb', size: 700_000, pct: 0.17 },
     { name: 'JavaScript', color: '#f1e05a', size: 600_000, pct: 0.15 },
@@ -155,6 +179,61 @@ describe.each(CARD_IDS)('%s', (card) => {
    * parameter value sitting in other people's READMEs — but nothing on a card
    * may still be calling the service what it was called before.
    */
+  /** The premise `drawnLanguages` counts on: no percentage without a language. */
+  it('prints no percentage outside its language block', () => {
+    expect(drawnLanguages(render(`${base}&hide=langs`))).toBe(0)
+  })
+
+  /**
+   * `langs_count` is a maximum, and three designs have a lower one of their own.
+   *
+   * Both halves of that were invisible. The ranking honoured the parameter all
+   * the way to eight and then a `slice(0, 3)` inside `vinyl` cut it back, so
+   * `langs_count=6` drew three with nothing anywhere to say why — reported as
+   * the parameter being ignored, which is exactly what it looks like. The
+   * ceilings stay, since a ceiling is part of a published card, but they are
+   * declared in `MAX_LANGUAGES` and each design is held to the one it declares
+   * at every value the parameter accepts.
+   */
+  it('draws as many languages as it was asked for, up to its own ceiling', () => {
+    const ceiling = MAX_LANGUAGES[card]
+
+    for (const requested of [1, 2, 3, 4, 5, 6, 7, 8]) {
+      const { svg, languages } = renderCardWithLanguages(
+        WORST_CASE,
+        paramsFixture(`${base}&langs_count=${requested}&animate=false`),
+      )
+
+      expect(languages.available).toBe(8)
+      expect(languages.ceiling).toBe(ceiling)
+      expect(languages.shown).toBe(Math.min(requested, ceiling))
+      // What it says it drew is what it drew.
+      expect(drawnLanguages(svg)).toBe(languages.shown)
+    }
+  })
+
+  /**
+   * The other half of the shortfall, and the ordinary one: the profile has
+   * fewer languages than the card was asked for. `available` is what makes that
+   * distinguishable from a design ignoring the parameter.
+   */
+  it('reports how many the profile had when it draws fewer than asked', () => {
+    const { svg, languages } = renderCardWithLanguages(
+      statsFixture({
+        languages: [
+          { name: 'Java', color: '#b07219', size: 0, pct: 0.42 },
+          { name: 'Kotlin', color: '#A97BFF', size: 0, pct: 0.3 },
+          { name: 'TypeScript', color: '#3178c6', size: 0, pct: 0.28 },
+        ],
+      }),
+      paramsFixture(`${base}&langs_count=8&animate=false`),
+    )
+
+    expect(languages.available).toBe(3)
+    expect(languages.shown).toBe(Math.min(3, MAX_LANGUAGES[card]))
+    expect(drawnLanguages(svg)).toBe(languages.shown)
+  })
+
   it('draws the project name only as the current one', () => {
     const svg = render(`${base}&show_credit=true`)
 

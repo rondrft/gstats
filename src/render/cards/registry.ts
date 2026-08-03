@@ -57,3 +57,46 @@ export const CARD_IDS = ['terminal', 'heatmap', 'pass', 'press', 'gauge', 'vinyl
 export type CardId = (typeof CARD_IDS)[number]
 
 export const DEFAULT_CARD: CardId = 'terminal'
+
+/**
+ * The most languages each design draws, whatever `langs_count` asks for.
+ *
+ * Three of the six stop short of eight because their shape does: the vinyl
+ * lists languages as tracks on side B of a record that already carries the
+ * stats on side A, and the press and gauge panels are one column standing
+ * beside their columns rather than a list with room to grow.
+ *
+ * Those ceilings existed already, as a `slice(0, 3)` and two `slice(0, 4)`
+ * inside the designs — which meant nothing outside them could know. The
+ * generator offered eight, the parameter table advertised eight, and somebody
+ * who asked for six on `card=vinyl` was given three with nothing anywhere to
+ * say why. **That is the whole reason this is a declaration and not three
+ * literals**: `params.ts` and the landing page both have to know the number,
+ * and neither can import a design — which is also why it lives here beside the
+ * ids rather than on `CardRenderer`.
+ *
+ * A ceiling is part of what a published card looks like, so raising one is a
+ * redesign under rule 2 and ships as a new id. The numbers below are what these
+ * designs have always drawn.
+ *
+ * `heatmap` is zero because it draws a calendar and no language block at all.
+ */
+export const MAX_LANGUAGES: Record<CardId, number> = {
+  terminal: 8,
+  heatmap: 0,
+  pass: 8,
+  press: 4,
+  gauge: 4,
+  vinyl: 3,
+}
+
+/**
+ * The largest ceiling any design has, and therefore the most `langs_count` can
+ * usefully ask for. Derived rather than written down twice.
+ */
+export const LANGS_CEILING = Math.max(...Object.values(MAX_LANGUAGES))
+
+/** Resolves any string to a published id, falling back to the default. */
+export function resolveCardId(id: string): CardId {
+  return (CARD_IDS as readonly string[]).includes(id) ? (id as CardId) : DEFAULT_CARD
+}

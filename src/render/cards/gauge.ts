@@ -71,7 +71,9 @@ function renderGauge(data: CardData, { params, strings }: RenderOptions): string
     height: BLOCK_HEIGHT,
   }))
 
-  const languages = data.languages.slice(0, 4)
+  // Capped by `MAX_LANGUAGES.gauge` before it gets here, so the panel is only
+  // ever asked for as many rows as it has.
+  const languages = data.languages
   const langLabelWidth = Math.max(
     22,
     ...languages.map((language) => textWidth(abbreviate(language.name), LANG_SIZE)),

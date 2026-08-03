@@ -142,7 +142,7 @@ new look ships under a new id.
 | `border` | hex | theme | Inner frame. `none` hides it. |
 | `radius` | 0–24 | `6` | Corner radius of the card. |
 | `hide` | csv | — | Modules to omit: `total`, `streak`, `best`, `langs`. |
-| `langs_count` | 1–8 | `4` | How many languages to list. |
+| `langs_count` | 1–8 | `4` | **At most** this many languages. See below for the two reasons a card lists fewer. |
 | `lang_mode` | string | `bytes` | How languages are ranked. See below. |
 | `exclude_langs` | csv | — | Languages to leave out, case-insensitive. |
 | `include_langs` | csv | — | Re-admit a language from the default exclusions. |
@@ -204,6 +204,37 @@ differently under the two.
 
 Bar length is scaled against the leading language, so the leader fills its row.
 The percentage beside it is the true share of the total.
+
+### Why a card lists fewer languages than you asked for
+
+`langs_count` is a maximum, and there are two separate reasons a card comes back
+with fewer. They look identical on the card, which is why the response says
+which one it was.
+
+**The profile has fewer to give.** This is the common one. After the by-product
+list and the 0.5% floor, plenty of accounts have three or four languages of
+substance and no more — asking for six changes nothing.
+
+**The design lists fewer.** Three of the six have a shape that stops earlier:
+`vinyl` lists **3**, `press` and `gauge` list **4**, `terminal` and `pass` list
+up to **8**, and `heatmap` draws no languages at all. Those ceilings are part of
+what those cards look like, so they do not change; the parameter is honoured up
+to the one belonging to the design you chose.
+
+Every card response carries the answer:
+
+```bash
+curl -sI "https://gstats.rondrft.workers.dev/api?username=USERNAME&langs_count=6" \
+  | grep -i x-languages
+# x-languages-shown: 3        drawn on the card
+# x-languages-available: 3    qualified after the filters — the profile's own number
+# x-languages-ceiling: 8      the most this design draws
+```
+
+`shown < available` means the design or `langs_count` cut it; `available` below
+what you asked for means the account did. GitHub's Camo proxy does not pass
+these on, so read them against this service directly rather than against the
+image in a rendered README.
 
 </details>
 

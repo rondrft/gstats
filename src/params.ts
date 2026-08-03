@@ -14,7 +14,7 @@
 
 import { DEFAULT_LOCALE, LOCALE_NAMES } from './i18n'
 import type { LangMode } from './languages'
-import { CARD_IDS, DEFAULT_CARD } from './render/cards/registry'
+import { CARD_IDS, DEFAULT_CARD, LANGS_CEILING } from './render/cards/registry'
 import { normalizeColor } from './render/color'
 import { DEFAULT_THEME, resolveTheme, THEME_NAMES, type Theme } from './render/themes'
 
@@ -54,7 +54,12 @@ export const DEFAULTS = {
 
 export const LIMITS = {
   radius: { min: 0, max: 24 },
-  langsCount: { min: 1, max: 8 },
+  /**
+   * The ceiling is the largest any design draws, so that a value the service
+   * accepts is a value some card can honour. A design with a lower one of its
+   * own applies it at render time; see `MAX_LANGUAGES`.
+   */
+  langsCount: { min: 1, max: LANGS_CEILING },
   /**
    * How long a client may reuse the rendered card.
    *

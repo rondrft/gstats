@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { BRAND_PATHS } from '../src/brand'
 import { landingPage } from '../src/landing'
-import { CARD_IDS } from '../src/render/cards/registry'
+import { DEFAULTS, LIMITS } from '../src/params'
+import { CARD_IDS, LANGS_CEILING, MAX_LANGUAGES } from '../src/render/cards/registry'
 import { THEME_NAMES } from '../src/render/themes'
 
 const page = landingPage('https://stats.example.com')
@@ -136,6 +137,39 @@ describe('landing page', () => {
     expect(script).toContain("if (value('lang_mode') !== 'bytes')")
   })
 
+  /**
+   * The count was a free text field, which invites a value the service will
+   * quietly clamp — and a control that accepts what the service will not honour
+   * is part of why a card drawing three languages for six read as a bug. Every
+   * option here is a value some design can actually draw.
+   */
+  it('offers the count as a dropdown over the range the service supports', () => {
+    expect(page).not.toMatch(/<input[^>]+id="langs_count"/)
+    expect(page).toMatch(/<select id="langs_count">/)
+
+    const control = /<select id="langs_count">([\s\S]*?)<\/select>/.exec(page)?.[1] ?? ''
+    const offered = [...control.matchAll(/<option value="(\d+)"/g)].map((match) => Number(match[1]))
+
+    expect(offered).toEqual(Array.from({ length: LIMITS.langsCount.max }, (_, index) => index + 1))
+    expect(LIMITS.langsCount.max).toBe(LANGS_CEILING)
+    expect(control).toContain(`<option value="${DEFAULTS.langsCount}" selected>`)
+  })
+
+  /**
+   * Three designs draw fewer than the largest does, and the page has to say so
+   * before somebody picks a number the card will not honour — that shortfall
+   * was invisible everywhere: on the card, in the table, and in this control.
+   */
+  it('narrows the count to what the chosen design draws, and says so', () => {
+    expect(script).toContain(`var LANG_CEILINGS = ${JSON.stringify(MAX_LANGUAGES)}`)
+    expect(script).toContain("var ceiling = LANG_CEILINGS[value('card')]")
+    expect(script).toContain('langsCount.disabled = ceiling === 0')
+    expect(page).toContain('id="langs_hint"')
+
+    // The other half of the shortfall, and the one no ceiling explains.
+    expect(script).toContain('under 0.5%')
+  })
+
   it('references no script or stylesheet it cannot serve itself', () => {
     expect(page).not.toMatch(/<script[^>]+src=/)
     expect(page).not.toMatch(/<link[^>]+stylesheet/)
@@ -228,89 +262,120 @@ describe('visual structure', () => {
  *
  * A textual assertion would not catch this coming back, so the script is run.
  */
+interface Fired {
+  srcWrites: string[]
+  type: (text: string) => void
+  advance: (ms: number) => void
+  /** Sets a control and fires the change the form listens for. */
+  choose: (id: string, value: string) => void
+  read: (id: string) => Record<string, unknown>
+  snippet: () => string
+}
+
+/**
+ * The page's script against a stub DOM.
+ *
+ * Shared by the two things worth running rather than reading: the debounce, and
+ * the language count narrowing itself to the chosen design. Both are behaviour
+ * that a textual assertion would keep passing after it broke.
+ */
+function run(): Fired {
+  const srcWrites: string[] = []
+  const handlers: Record<string, ((event: unknown) => void)[]> = {}
+  let clock = 0
+  const timers: { at: number; id: number; run: () => void }[] = []
+  let nextTimer = 1
+
+  const node = (id: string) => {
+    // The count is a `<select>`, so it has options for the script to narrow.
+    const options =
+      id === 'langs_count'
+        ? Array.from({ length: LIMITS.langsCount.max }, (_, index) => ({
+            value: String(index + 1),
+            hidden: false,
+            disabled: false,
+          }))
+        : []
+
+    const self: Record<string, unknown> = {
+      value: id === 'username' ? 'rondrft' : id === 'langs_count' ? '4' : '',
+      checked: id !== 'credit' && id !== 'bars',
+      addEventListener: (type: string, fn: (event: unknown) => void) => {
+        if (id !== 'controls') return
+        handlers[type] ??= []
+        handlers[type].push(fn)
+      },
+      querySelectorAll: () => options,
+      getAttribute: () => null,
+      closest: () => null,
+    }
+    if (id === 'card') self.value = 'terminal'
+    if (id === 'theme') self.value = 'phosphor'
+    if (id === 'locale') self.value = 'en'
+    if (id === 'lang_mode') self.value = 'bytes'
+    if (['ring', 'accent', 'bg'].includes(id)) self.value = '#000000'
+    if (id === 'preview') {
+      Object.defineProperty(self, 'src', {
+        set: (next: string) => srcWrites.push(next),
+        get: () => srcWrites.at(-1) ?? '',
+      })
+    }
+    return self
+  }
+
+  const cache = new Map<string, unknown>()
+  const documentStub = {
+    getElementById: (id: string) => {
+      if (!cache.has(id)) cache.set(id, node(id))
+      return cache.get(id)
+    },
+  }
+
+  const setTimeoutStub = (fn: () => void, ms: number) => {
+    const id = nextTimer++
+    timers.push({ at: clock + ms, id, run: fn })
+    return id
+  }
+  const clearTimeoutStub = (id: number) => {
+    const index = timers.findIndex((timer) => timer.id === id)
+    if (index >= 0) timers.splice(index, 1)
+  }
+
+  new Function('document', 'setTimeout', 'clearTimeout', script)(
+    documentStub,
+    setTimeoutStub,
+    clearTimeoutStub,
+  )
+
+  const fire = (type: string) => {
+    for (const fn of handlers[type] ?? []) fn({})
+  }
+
+  return {
+    srcWrites,
+    type: (text: string) => {
+      const field = documentStub.getElementById('username') as { value: string }
+      field.value = text
+      fire('input')
+    },
+    choose: (id: string, value: string) => {
+      ;(documentStub.getElementById(id) as { value: string }).value = value
+      fire('change')
+    },
+    read: (id: string) => documentStub.getElementById(id) as Record<string, unknown>,
+    snippet: () => String((documentStub.getElementById('snippet') as { value: string }).value),
+    advance: (ms: number) => {
+      clock += ms
+      // Only the due ones. Draining the whole queue would fire the pending
+      // debounce early and the test would pass on a page that never debounced.
+      const due = timers.filter((timer) => timer.at <= clock)
+      for (const timer of due) timers.splice(timers.indexOf(timer), 1)
+      for (const timer of due) timer.run()
+    },
+  }
+}
+
 describe('the preview does not fire on every keystroke', () => {
-  interface Fired {
-    srcWrites: string[]
-    type: (text: string) => void
-    advance: (ms: number) => void
-  }
-
-  function run(): Fired {
-    const srcWrites: string[] = []
-    const handlers: Record<string, ((event: unknown) => void)[]> = {}
-    let clock = 0
-    const timers: { at: number; id: number; run: () => void }[] = []
-    let nextTimer = 1
-
-    const node = (id: string) => {
-      const self: Record<string, unknown> = {
-        value: id === 'username' ? 'rondrft' : id === 'langs_count' ? '4' : '',
-        checked: id !== 'credit' && id !== 'bars',
-        addEventListener: (type: string, fn: (event: unknown) => void) => {
-          if (id !== 'controls') return
-          handlers[type] ??= []
-          handlers[type].push(fn)
-        },
-        querySelectorAll: () => [],
-        getAttribute: () => null,
-        closest: () => null,
-      }
-      if (id === 'card') self.value = 'terminal'
-      if (id === 'theme') self.value = 'phosphor'
-      if (id === 'locale') self.value = 'en'
-      if (id === 'lang_mode') self.value = 'bytes'
-      if (['ring', 'accent', 'bg'].includes(id)) self.value = '#000000'
-      if (id === 'preview') {
-        Object.defineProperty(self, 'src', {
-          set: (next: string) => srcWrites.push(next),
-          get: () => srcWrites.at(-1) ?? '',
-        })
-      }
-      return self
-    }
-
-    const cache = new Map<string, unknown>()
-    const documentStub = {
-      getElementById: (id: string) => {
-        if (!cache.has(id)) cache.set(id, node(id))
-        return cache.get(id)
-      },
-    }
-
-    const setTimeoutStub = (fn: () => void, ms: number) => {
-      const id = nextTimer++
-      timers.push({ at: clock + ms, id, run: fn })
-      return id
-    }
-    const clearTimeoutStub = (id: number) => {
-      const index = timers.findIndex((timer) => timer.id === id)
-      if (index >= 0) timers.splice(index, 1)
-    }
-
-    new Function('document', 'setTimeout', 'clearTimeout', script)(
-      documentStub,
-      setTimeoutStub,
-      clearTimeoutStub,
-    )
-
-    return {
-      srcWrites,
-      type: (text: string) => {
-        const field = documentStub.getElementById('username') as { value: string }
-        field.value = text
-        for (const fn of handlers.input ?? []) fn({})
-      },
-      advance: (ms: number) => {
-        clock += ms
-        // Only the due ones. Draining the whole queue would fire the pending
-        // debounce early and the test would pass on a page that never debounced.
-        const due = timers.filter((timer) => timer.at <= clock)
-        for (const timer of due) timers.splice(timers.indexOf(timer), 1)
-        for (const timer of due) timer.run()
-      },
-    }
-  }
-
   it('collapses a typed login into one request instead of one per prefix', () => {
     const page = run()
 
@@ -339,5 +404,51 @@ describe('the preview does not fire on every keystroke', () => {
     page.type('octocat')
     page.advance(1000)
     expect(page.srcWrites).toHaveLength(1)
+  })
+})
+
+/**
+ * The control that made the shortfall invisible. A free text field accepted six
+ * for a design that draws three, the service clamped it in silence, and nothing
+ * between the two ever said so. Run rather than read: a dropdown whose options
+ * are correct in the markup and never narrowed is the same bug with a nicer
+ * appearance.
+ */
+describe('the language count is narrowed to the chosen design', () => {
+  it('offers only what the design draws, and clamps a value beyond it', () => {
+    const page = run()
+    const control = page.read('langs_count')
+    const optionsBeyond = (ceiling: number) =>
+      (
+        control.querySelectorAll as () => { value: string; hidden: boolean; disabled: boolean }[]
+      )().filter((option) => Number(option.value) > ceiling)
+
+    page.choose('langs_count', '6')
+    expect(page.snippet()).toContain('langs_count=6')
+    for (const option of optionsBeyond(MAX_LANGUAGES.terminal)) {
+      expect(option.disabled).toBe(false)
+    }
+
+    // The vinyl lists three. The six the user had chosen is not one of its
+    // options any more, and the value comes down with it.
+    page.choose('card', 'vinyl')
+    expect(control.value).toBe(String(MAX_LANGUAGES.vinyl))
+    for (const option of optionsBeyond(MAX_LANGUAGES.vinyl)) {
+      expect(option.hidden).toBe(true)
+      expect(option.disabled).toBe(true)
+    }
+
+    // And three is what the vinyl would draw anyway, so it leaves the snippet.
+    expect(page.snippet()).not.toContain('langs_count=')
+  })
+
+  it('disables the control for a design that draws no languages', () => {
+    const page = run()
+
+    page.choose('card', 'heatmap')
+
+    expect(page.read('langs_count').disabled).toBe(true)
+    expect(String(page.read('langs_hint').textContent)).toContain('no languages')
+    expect(page.snippet()).not.toContain('langs_count=')
   })
 })

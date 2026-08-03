@@ -34,7 +34,7 @@ import {
   type RateLimitDecision,
   resolveLimit,
 } from './ratelimit'
-import { renderCard } from './render/cards'
+import { type LanguageCount, renderCardWithLanguages } from './render/cards'
 import { ERROR_CACHE_SECONDS, type ErrorCardKind, renderErrorCard } from './render/error-card'
 import { type CacheStatus, getStats } from './stats'
 import {
@@ -259,8 +259,14 @@ async function handleCard(request: Request, url: URL, env: Env): Promise<Respons
       parsed.params,
     )
 
-    return new Response(renderCard(data, parsed.params), {
-      headers: cardHeaders(status, resolveMaxAge(env, parsed.params.maxAgeOverride)),
+    const card = renderCardWithLanguages(data, parsed.params)
+
+    return new Response(card.svg, {
+      headers: cardHeaders(
+        status,
+        resolveMaxAge(env, parsed.params.maxAgeOverride),
+        card.languages,
+      ),
     })
   } catch (error) {
     const failure = error instanceof StatsError ? error : new StatsError('upstream', String(error))
@@ -282,9 +288,27 @@ const STALE_MAX_AGE = 600
  * A card served from an expired entry is still a correct card, a few hours
  * behind, and it is always the right answer over an error card. `X-Stale` is
  * what makes that visible to anyone debugging, since the body looks normal.
+ *
+ * The three language headers are there for the same kind of reader, answering
+ * the same kind of invisible question: a card that lists three languages for
+ * `langs_count=6` looks exactly like a parameter being ignored. `available`
+ * says how many the profile has after the by-product list and the half-per-cent
+ * floor, and `ceiling` says how many this design draws — between them the
+ * shortfall always has a stated cause. Camo does not pass them on, which is
+ * correct: they are addressed to whoever is building the URL, not to a reader.
  */
-function cardHeaders(status: CacheStatus, maxAge: number): Record<string, string> {
-  const base = { 'content-type': SVG_CONTENT_TYPE, 'x-cache': status }
+function cardHeaders(
+  status: CacheStatus,
+  maxAge: number,
+  languages: LanguageCount,
+): Record<string, string> {
+  const base = {
+    'content-type': SVG_CONTENT_TYPE,
+    'x-cache': status,
+    'x-languages-shown': String(languages.shown),
+    'x-languages-available': String(languages.available),
+    'x-languages-ceiling': String(languages.ceiling),
+  }
   if (status === 'STALE') {
     return { ...base, 'cache-control': `public, max-age=${STALE_MAX_AGE}`, 'x-stale': 'true' }
   }

@@ -233,6 +233,64 @@ are, and the same breakdown reads 6, 4, 2, 1. The trade is real: a bar now
 compares within one card rather than between two. That is the comparison a reader
 actually makes, and the absolute figure is printed next to it either way.
 
+### A design's language ceiling is declared, and the shortfall is reported
+
+`src/render/cards/registry.ts`, `src/render/cards/index.ts`, `src/index.ts`
+
+`langs_count` accepts one to eight. A card came back with three for
+`langs_count=6`, and was reported as the parameter being ignored — which is
+exactly what it looks like from outside. It was two separate things wearing one
+symptom, and only one of them was a defect.
+
+**The ranking was never the culprit**, which is worth recording because it is
+where everyone looks first: `rankLanguages` honours every value at both ends,
+verified against real accounts rather than fixtures. What cut the list was
+further downstream, or upstream of the whole service:
+
+- **Three designs held their own `slice`.** `vinyl` took three, `press` and
+  `gauge` four, written inside the design where nothing else could see them. The
+  generator offered eight, the parameter table advertised eight, and the card
+  drew three. The ceilings are real — the vinyl lists languages as tracks on a
+  side that already carries the stats, and the press and gauge panels are one
+  column standing beside their columns — but a limit nobody outside the file can
+  read is indistinguishable from a bug.
+- **The account had three languages.** After the by-product list and the
+  half-per-cent floor, the reported profile has exactly three, and re-admitting
+  every excluded language with `include_langs` still gives three: the two it
+  loses are both under the floor either way. **The exclusion list was not what
+  cost anybody anything here**, which is the measurement that settled whether to
+  loosen it. Loosening it would have changed every published card to fix a case
+  it was not causing.
+
+The ceilings stay, because a ceiling is part of what a published card looks like
+and rule 2 makes raising one a redesign. What changes is that they are declared
+in `MAX_LANGUAGES` beside the ids, where `params.ts` and the landing page can
+both read them without importing a design — the reason the record is there
+rather than on `CardRenderer`. The count is applied once, before the design is
+called, so a design is only ever handed the number it can draw. The output is
+byte-identical; the snapshots did not move.
+
+**Where the explanation goes is the other half, and the obvious homes are all
+wrong.** Not on the card: a design is frozen once published and the document has
+12 KB to fit in. Not as a status: `/api` answers 200 or the reader gets a broken
+image. Not as a second request from the landing page, which would double the
+preview's cost against the resource that runs out — the same argument that put a
+debounce on it.
+
+So it rides on the response that is already being made. `X-Languages-Shown`,
+`X-Languages-Available` and `X-Languages-Ceiling` cost nothing, are addressed to
+whoever is building the URL rather than to a reader, and between them every
+shortfall has a stated cause: `available` below what was asked for is the
+account, `shown` below `available` is the design or the parameter. Camo does not
+forward them, which is correct — the reader was never the audience.
+
+The generator says the same thing in words, because that is where somebody
+choosing the number actually is: the count is a dropdown that narrows to the
+chosen design's ceiling, and the line under it names the other reason. **A free
+text field was part of how this went unnoticed** — it accepted any number and
+the service clamped the rest in silence, so nothing anywhere in the path from
+the control to the card ever admitted that six was not going to happen.
+
 ### The language block preserves its whitespace
 
 `src/render/langs.ts`
