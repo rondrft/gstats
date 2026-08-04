@@ -228,15 +228,82 @@ describe('languages', () => {
     expect(svg).toContain('xml:space="preserve"')
     // Name padded to five cells, bar padded to six, percentage right-aligned to
     // three. Every line is the same length, so the columns line up on their own.
-    // The bars are scaled against the leader, so the leader fills its six cells
-    // and the rest are visibly shorter — against 100% these were 2, 2, 1, 1.
+    // A half block is one cell wide like a full one, so it buys the scale twelve
+    // steps without moving a column.
     expect(svg).toContain('ts    ██████  41%')
-    expect(svg).toContain('rs    ████    25%')
-    expect(svg).toContain('py    ██      17%')
-    expect(svg).toContain('go    █       10%')
+    expect(svg).toContain('rs    ████▌   25%')
+    expect(svg).toContain('py    ████    17%')
+    expect(svg).toContain('go    ███     10%')
   })
 
-  it('gives a language that rounds to nothing a single cell', () => {
+  /**
+   * Against the leader on a linear scale this breakdown drew 6, 4, 2, 1 — the
+   * complaint that produced the square root was the same one a step further
+   * down: a long tail all collapses to a single cell, so 5% and 2% are drawn
+   * identically. Six cells cannot hold a long tail proportionally, so the bar
+   * became an ordering and the percentage stayed the measurement.
+   */
+  it('keeps a long tail legible instead of collapsing it to one cell', () => {
+    // 49/16/13/5/5/5/2/2 in one repository, so the per-repository cap — which
+    // engages at seven — stays out of it and the shares arrive as written.
+    const shares = [49, 16, 13, 5, 5, 5, 2, 2]
+    const names = ['JavaScript', 'Go', 'Ruby', 'C', 'Python', 'Objective-C', 'C++', 'CoffeeScript']
+    const svg = renderCard(
+      statsFixture({
+        repos: {
+          langs: names.map((name) => ({ name, color: '#888888' })),
+          repos: [
+            {
+              w: 1,
+              p: 0,
+              e: shares.map((share, index): [number, number] => [index, share * 1000]),
+            },
+          ],
+        },
+      }),
+      paramsFixture('username=x&langs_count=8'),
+    )
+
+    const bars = [...svg.matchAll(/xml:space="preserve">\S+ +(\S+) /g)].map((match) => match[1])
+
+    expect(bars).toEqual(['██████', '███▌', '███', '██', '██', '██', '█', '█'])
+    // Five distinct shares, five distinct bars. Linearly this was three.
+    expect(new Set(bars).size).toBe(5)
+  })
+
+  /**
+   * And the other end, which the square root must not cost: three languages
+   * within a few points of each other still draw three different bars. At whole
+   * cells it would not — 41/33/26 collapses to 6, 5, 5 — which is what the half
+   * cell is for.
+   */
+  it('still separates three languages that are close together', () => {
+    const svg = renderCard(
+      statsFixture({
+        repos: {
+          langs: ['Rust', 'Go', 'Zig'].map((name) => ({ name, color: '#888888' })),
+          repos: [
+            {
+              w: 1,
+              p: 0,
+              e: [
+                [0, 41_000],
+                [1, 33_000],
+                [2, 26_000],
+              ],
+            },
+          ],
+        },
+      }),
+      paramsFixture('username=x'),
+    )
+
+    const bars = [...svg.matchAll(/xml:space="preserve">\S+ +(\S+) /g)].map((match) => match[1])
+
+    expect(bars).toEqual(['██████', '█████▌', '█████'])
+  })
+
+  it('gives a language that rounds to nothing half a cell', () => {
     const data = statsFixture({
       languages: [
         { name: 'TypeScript', color: null, size: 99, pct: 0.99 },
@@ -248,7 +315,9 @@ describe('languages', () => {
     // now runs at render time — so the card has to be asked for it back.
     const svg = renderCard(data, paramsFixture('username=x&include_langs=makefile'))
 
-    expect(svg).toContain('make  █        1%')
+    // The floor is half a cell now rather than a whole one, which is what keeps
+    // 1% against a 99% leader visibly shorter than 5% against a 49% one.
+    expect(svg).toContain('make  ▌        1%')
   })
 
   it('uses the language colour reported by GitHub for the bar style', () => {

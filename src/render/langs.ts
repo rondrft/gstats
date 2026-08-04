@@ -20,6 +20,9 @@ const MAX_BLOCKS = 6
 
 const BLOCK = '█'
 
+/** Half a cell of bar. One cell wide, like the full block, so nothing shifts. */
+const HALF_BLOCK = '▌'
+
 /** Width of the name column, in characters. */
 const NAME_WIDTH = 5
 
@@ -153,7 +156,10 @@ function blockLine(
   text: string,
 ): string {
   const name = abbreviate(language.name).slice(0, NAME_WIDTH).padEnd(NAME_WIDTH)
-  const bar = BLOCK.repeat(blockCount(language.pct, leader)).padEnd(MAX_BLOCKS)
+  const halves = blockCount(language.pct, leader)
+  const bar = (BLOCK.repeat(Math.floor(halves / 2)) + (halves % 2 === 1 ? HALF_BLOCK : '')).padEnd(
+    MAX_BLOCKS,
+  )
   const percent = `${Math.round(language.pct * 100)}`.padStart(3)
   const line = `${name} ${bar} ${percent}%`
   return (
@@ -163,25 +169,49 @@ function blockLine(
 }
 
 /**
- * Bar length, as a share of the *leading* language rather than of the whole.
+ * Bar length: the square root of the share of the *leading* language.
  *
- * Scaling against 100% wastes almost all the resolution. Six cells over the full
- * range makes one cell worth 17 percentage points, and a normal breakdown —
- * 41/25/17/10 — collapses to 2, 2, 1, 1: the bars all look the same and carry no
- * information the percentages beside them do not already give.
+ * Two corrections, made a year apart, and the second only makes sense with the
+ * first in view.
  *
- * Against the leader, the same breakdown reads 6, 4, 2, 1. The trade is that a
- * bar is no longer comparable between two cards, only within one. That is the
- * comparison a reader actually makes, and the percentage is right there for the
- * other one.
+ * *Against the leader, not against 100%.* Six cells over the full range makes
+ * one cell worth 17 percentage points, and a normal breakdown — 41/25/17/10 —
+ * collapsed to 2, 2, 1, 1: four bars that look alike and say nothing the
+ * percentages do not. Scaling to the leader spends the resolution where the
+ * differences are. The cost is that a bar compares within one card rather than
+ * between two, which is the comparison a reader actually makes.
+ *
+ * *Square root, not linear.* That fixed the head and left the tail. A real
+ * account — 49/16/13/5/5/5/2/2 — draws linearly as 6, 2, 2, 1, 1, 1, 1, 1: the
+ * last five are one cell each, so a language with two and a half times another's
+ * share is indistinguishable from it. Six cells cannot hold a long tail
+ * proportionally; that is arithmetic, not a tuning problem, and the choice is
+ * only whether the tail collapses or the scale bends. It bends. The same
+ * breakdown reads 6, 3½, 3, 2, 2, 2, 1, 1 — every distinct share a distinct bar.
+ *
+ * **So the bar is an ordering and the percentage beside it is the measurement**,
+ * which is the same division of labour the ring modules make. A square root is
+ * the conventional remedy for a long-tailed comparison and needs no constant to
+ * tune, which is why it is this rather than a logarithm: both separate the tail,
+ * and only one of them has an arbitrary base in it.
  */
 function barFraction(pct: number, leader: number): number {
-  return leader <= 0 ? 0 : Math.min(1, pct / leader)
+  return leader <= 0 ? 0 : Math.sqrt(Math.min(1, pct / leader))
 }
 
-/** A language that made the list gets at least one cell, however small it is. */
+/**
+ * Bar length in *half* cells, so six cells carry twelve steps.
+ *
+ * The extra resolution is what lets the square root keep both ends: at whole
+ * cells it separates the tail and then loses 41/33/26, which draws 6, 5, 5. Half
+ * cells cost nothing — U+258C is the same one cell wide as the U+2588 beside it,
+ * so the column grid and every measurement built on it are untouched.
+ *
+ * A language that made the list gets at least half a cell, however small it is.
+ */
 function blockCount(pct: number, leader: number): number {
-  return Math.max(1, Math.min(MAX_BLOCKS, Math.round(barFraction(pct, leader) * MAX_BLOCKS)))
+  const steps = MAX_BLOCKS * 2
+  return Math.max(1, Math.min(steps, Math.round(barFraction(pct, leader) * steps)))
 }
 
 /**

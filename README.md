@@ -202,8 +202,11 @@ differently under the two.
 ![](https://gstats.rondrft.workers.dev/api?username=USERNAME&include_langs=CSS&exclude_langs=Go)
 ```
 
-Bar length is scaled against the leading language, so the leader fills its row.
-The percentage beside it is the true share of the total.
+Bar length is the square root of the share of the leading language, so the leader
+fills its row and a long tail stays legible — against a 49% leader, 5% and 2%
+draw differently instead of both bottoming out at one cell. **The bar is an
+ordering; the percentage beside it is the measurement**, and it is the true share
+of the total.
 
 ### Why a card lists fewer languages than you asked for
 

@@ -219,19 +219,49 @@ given in viewBox units instead. **Written the idiomatic way first.**
 occupy a full monospace cell. Sizing on the digit count overflows the ring for
 any locale that groups thousands.
 
-### Language bars are scaled against the leader, not against 100%
+### Language bars are scaled against the leader, and by square root
 
 `src/render/langs.ts`
 
-Six cells across the whole 0-100% range makes one cell worth seventeen
-percentage points. A normal breakdown — 41/25/17/10 — drew as 2, 2, 1, 1: four
-bars that look the same and say nothing the percentages beside them do not
-already say. **Shipped that way and was visible in production.**
+Two corrections a year apart, and the second only makes sense with the first in
+view. **Both were reported from production**, which is worth noting on its own:
+a bar that is subtly uninformative is not something a test catches.
 
-Scaling against the leading language spends the resolution where the differences
-are, and the same breakdown reads 6, 4, 2, 1. The trade is real: a bar now
-compares within one card rather than between two. That is the comparison a reader
-actually makes, and the absolute figure is printed next to it either way.
+*Against the leader, not against 100%.* Six cells across the whole range makes
+one cell worth seventeen percentage points. A normal breakdown — 41/25/17/10 —
+drew as 2, 2, 1, 1: four bars that look the same and say nothing the percentages
+beside them do not already say. Scaling against the leading language spends the
+resolution where the differences are.
+
+*Square root, not linear.* That fixed the head and left the tail, which took a
+long-tailed account to expose: 49/16/13/5/5/5/2/2 drew as 6, 2, 2, 1, 1, 1, 1, 1
+— **the last five bars identical for shares differing by two and a half times.**
+
+The reason is arithmetic rather than tuning, and it is worth stating because it
+rules out the obvious fixes. To draw 2% distinguishably from 5% against a 49%
+leader, a linear scale needs about fifty steps. Six monospace cells do not have
+fifty steps and never will. So either the tail collapses or the scale bends, and
+those are the only two options: widening the bar is a redesign of every card and
+still would not reach fifty.
+
+It bends. A square root separates the tail — 6, 3½, 3, 2, 2, 2, 1, 1 — and needs
+no constant, which is the whole reason it is a square root rather than a
+logarithm. Both work; only one of them has an arbitrary base to defend.
+
+**The half cell is what makes it affordable at the other end.** At whole cells
+the square root buys the tail by losing the head: 41/33/26 collapses to 6, 5, 5.
+U+258C is one cell wide, exactly like the U+2588 beside it, so twelve steps fit
+in the same six cells and the column grid, `ROW_CELLS` and every measurement
+derived from them are untouched. With it, both ends survive: the long tail keeps
+five distinct bars and 41/33/26 keeps three.
+
+The cost is stated rather than hidden: **the bar is an ordering and the
+percentage beside it is the measurement.** A bar was already not comparable
+between two cards, and is now not proportional within one either. That is the
+same division of labour the ring modules make — the streak ring is the only one
+with an honest denominator, and the number in the middle carries the figure. Two
+languages that are genuinely close still draw the same bar, which is correct:
+34/33/33 is three full bars because that is what it is.
 
 ### A design's language ceiling is declared, and the shortfall is reported
 

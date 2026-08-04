@@ -93,6 +93,18 @@ Committed but not yet deployed.
 
 ### Changed
 
+- **Language bars are drawn on a square-root scale, in half cells.** **This
+  changes what `terminal` and `gauge` draw** — no widths, no positions, nothing
+  else on either card, and the percentages beside the bars are untouched. The
+  reason is the one the previous scale change was for, a step further down: an
+  account like 49/16/13/5/5/5/2/2 drew its last five bars identically, so a
+  language with two and a half times another's share looked the same as it. Six
+  monospace cells cannot hold a long tail proportionally — separating 2% from 5%
+  against a 49% leader needs about fifty steps — so the scale bends instead. Half
+  blocks (U+258C, one cell wide like the full block) give twelve steps in the
+  same six cells, which is what keeps the other end intact: 41/33/26 still draws
+  three different bars, where the square root alone would have flattened it to
+  6, 5, 5. **The bar is now an ordering and the percentage is the measurement.**
 - **Streaks now count against Anywhere on Earth (UTC−12) rather than UTC.** A day
   counts for as long as it is still that day somewhere, so a streak is never cut
   short before the reader's own day is over — which is what UTC was doing to

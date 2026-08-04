@@ -45,13 +45,33 @@ const SOCIAL_PREVIEW_URL = `${REPO_URL.replace('github.com', 'raw.githubusercont
 const DEMO_USER = 'rondrft'
 
 /**
+ * The designs that draw fewer languages than the parameter accepts, named.
+ *
+ * Derived rather than written out, so a design added with a lower ceiling — or
+ * one whose ceiling changes — cannot leave a wrong sentence behind in the table.
+ * This is the long form of what the control's one-line hint says about whichever
+ * design is selected; the table is where the detail belongs, because it has the
+ * width for it and the control does not.
+ */
+function lowerCeilings(): string {
+  const fewer = CARD_IDS.filter((id) => MAX_LANGUAGES[id] > 0 && MAX_LANGUAGES[id] < LANGS_CEILING)
+  const none = CARD_IDS.filter((id) => MAX_LANGUAGES[id] === 0)
+
+  return [
+    ...fewer.map((id) => `${id} ${MAX_LANGUAGES[id]}`),
+    ...none.map((id) => `${id} none`),
+  ].join(', ')
+}
+
+/**
  * Every parameter `/api` accepts, with its default.
  *
  * It was seven of them once, with the descriptions cut short, chosen so the
  * panel finished level with the taller control column beside it. That is
  * choosing the layout over the content: somebody looking for `lang_mode` found
  * a table that did not mention it and no indication that it existed. The
- * columns are uneven now, which is the correct thing for them to be.
+ * columns are uneven now, which is the correct thing for them to be — and it is
+ * why the detail a control cannot caption in one line lives here.
  */
 const REFERENCE: [name: string, values: string, fallback: string][] = [
   ['username', 'a GitHub login', 'required'],
@@ -67,7 +87,7 @@ const REFERENCE: [name: string, values: string, fallback: string][] = [
   ['hide', 'total, streak, best, langs — comma separated', 'nothing hidden'],
   [
     'langs_count',
-    `at most this many languages, 1 to ${LANGS_CEILING} — some designs list fewer, and so does a profile with fewer to list`,
+    `at most this many, 1 to ${LANGS_CEILING}. Some designs draw fewer (${lowerCeilings()}), and so does a profile whose remaining languages are under 0.5% or on the by-product list — <code>include_langs</code> brings those back`,
     String(DEFAULTS.langsCount),
   ],
   ['lang_mode', 'bytes, or repos to count what each language leads', 'bytes'],
@@ -353,7 +373,10 @@ ${Array.from(
     `          <option value="${index + 1}"${index + 1 === DEFAULTS.langsCount ? ' selected' : ''}>${index + 1}</option>`,
 ).join('\n')}
         </select>
-        <p class="hint" id="langs_hint"></p>
+        <!-- Written out for the default design rather than left to the script:
+             an empty caption that fills in on first render is a line of the
+             column appearing after the page has settled. -->
+        <p class="hint" id="langs_hint">at most ${MAX_LANGUAGES[DEFAULT_CARD]} here</p>
       </div>
       <div>
         <label>modules</label>
@@ -485,11 +508,17 @@ ${THEME_NAMES.map(
   /**
    * Narrows the count to what the chosen design draws, and says so underneath.
    *
-   * Two different shortfalls end in the same card, and the hint has to cover
-   * both: this design lists fewer than eight, and this profile has fewer than
-   * eight to list. The second one is the common case — a language on the
-   * by-product list or under half a per cent never reaches the card — and it is
-   * the one nothing anywhere used to mention.
+   * The hint is one line, and shorter than the control it belongs to. It said
+   * both of the reasons a card lists fewer languages and ran to seven lines in
+   * a column this narrow — taller than the select, and enough to push the whole
+   * left column out of step with the preview beside it. **Inline help in a form
+   * has to be shorter than the field it explains**, or it stops being a caption
+   * and becomes something to read instead. The other reason, and every detail
+   * of this one, is in the parameter table, which has the width for it.
+   *
+   * What is left here is the half the control cannot express on its own: the
+   * options stop at the design's ceiling, and this says what that ceiling is
+   * rather than leaving the reader to count the entries in a closed dropdown.
    */
   function syncLangs() {
     var ceiling = LANG_CEILINGS[value('card')];
@@ -505,10 +534,7 @@ ${THEME_NAMES.map(
     langsCount.disabled = ceiling === 0;
     if (ceiling > 0 && Number(langsCount.value) > ceiling) langsCount.value = String(ceiling);
 
-    langsHint.textContent = ceiling === 0
-      ? 'this design draws no languages'
-      : 'at most ' + ceiling + ' here. A profile shows fewer when the rest are '
-        + 'under 0.5% or on the by-product list — include_langs brings those back.';
+    langsHint.textContent = ceiling === 0 ? 'none on this design' : 'at most ' + ceiling + ' here';
   }
 
   function build() {

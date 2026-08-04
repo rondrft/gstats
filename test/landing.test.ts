@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { BRAND_PATHS } from '../src/brand'
 import { landingPage } from '../src/landing'
 import { DEFAULTS, LIMITS } from '../src/params'
-import { CARD_IDS, LANGS_CEILING, MAX_LANGUAGES } from '../src/render/cards/registry'
+import { CARD_IDS, DEFAULT_CARD, LANGS_CEILING, MAX_LANGUAGES } from '../src/render/cards/registry'
 import { THEME_NAMES } from '../src/render/themes'
 
 const page = landingPage('https://stats.example.com')
@@ -164,10 +164,44 @@ describe('landing page', () => {
     expect(script).toContain(`var LANG_CEILINGS = ${JSON.stringify(MAX_LANGUAGES)}`)
     expect(script).toContain("var ceiling = LANG_CEILINGS[value('card')]")
     expect(script).toContain('langsCount.disabled = ceiling === 0')
-    expect(page).toContain('id="langs_hint"')
+    // Served with the default design's ceiling already in it, so the caption is
+    // not a line that appears after the page has settled.
+    expect(page).toContain(`id="langs_hint">at most ${MAX_LANGUAGES[DEFAULT_CARD]} here<`)
+  })
 
-    // The other half of the shortfall, and the one no ceiling explains.
-    expect(script).toContain('under 0.5%')
+  /**
+   * A caption under a field has to be shorter than the field. This one carried
+   * both reasons a card lists fewer languages, which in a column this narrow ran
+   * to seven lines — taller than the control it explained, and enough to push
+   * the left column out of step with the preview. The detail belongs in the
+   * table, which has the width for it.
+   */
+  it('keeps the inline hint to one line and puts the detail in the table', () => {
+    const hints = [...script.matchAll(/langsHint\.textContent = ([^;]+);/g)].map(
+      (match) => match[1] ?? '',
+    )
+    expect(hints).toHaveLength(1)
+
+    // Every branch of it, with the longest ceiling substituted in.
+    for (const literal of hints[0]?.match(/'[^']*'/g) ?? []) {
+      expect(literal.replace(/'/g, '').length + String(LANGS_CEILING).length).toBeLessThanOrEqual(
+        24,
+      )
+    }
+
+    // The reasons themselves, where there is room to state them.
+    const cell = /<th><code>langs_count<\/code><\/th><td>([^<]*(?:<code>[^<]*<\/code>[^<]*)*)/.exec(
+      page,
+    )?.[1]
+    expect(cell).toContain('under 0.5%')
+    expect(cell).toContain('by-product list')
+    expect(cell).toContain('include_langs')
+    // Named from the registry, so a new design cannot leave a wrong sentence.
+    for (const id of CARD_IDS) {
+      if (MAX_LANGUAGES[id] > 0 && MAX_LANGUAGES[id] < LANGS_CEILING) {
+        expect(cell).toContain(`${id} ${MAX_LANGUAGES[id]}`)
+      }
+    }
   })
 
   it('references no script or stylesheet it cannot serve itself', () => {
@@ -448,7 +482,7 @@ describe('the language count is narrowed to the chosen design', () => {
     page.choose('card', 'heatmap')
 
     expect(page.read('langs_count').disabled).toBe(true)
-    expect(String(page.read('langs_hint').textContent)).toContain('no languages')
+    expect(String(page.read('langs_hint').textContent)).toBe('none on this design')
     expect(page.snippet()).not.toContain('langs_count=')
   })
 })
