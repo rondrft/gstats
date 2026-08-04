@@ -373,6 +373,73 @@ describe('cards', () => {
     expect(body).toContain('>6<')
     expect(body).toContain(expected)
   })
+
+  /**
+   * The heatmap's window is the UTC day; the streak's is Anywhere on Earth.
+   *
+   * They are the same day for half of every day and a day apart for the other
+   * half, and the calendar used to be cut to the streak's. So from midnight UTC
+   * until noon the card had no square for today — a day already fetched, already
+   * stored, and then trimmed off the end of the array — while GitHub's calendar
+   * was drawing it. This runs the whole service at 02:00 UTC, where the two
+   * days disagree, and looks for the square.
+   */
+  it('draws today on the heatmap during the twelve hours AoE is behind UTC', async () => {
+    stubGitHub()
+    // 02:00 UTC: Anywhere on Earth is still the previous day.
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-04T02:00:00Z'))
+
+    const body = await (await get('/api?username=lastday&card=heatmap&animate=false')).text()
+    const cells = [...body.matchAll(/<use href="#([a-g])" x="(\d+)"\/>/g)].map((match) => ({
+      row: match[1],
+      column: Number(match[2]) / 9,
+    }))
+
+    // The stub reports seven days ending today, with a zero on the oldest — so
+    // six drawn cells, all of them in the final column.
+    expect(cells).toHaveLength(6)
+    for (const cell of cells) expect(cell.column).toBe(52)
+
+    // Which rows of that column, sorted: the window ends on today, so the six
+    // active days fill rows b to g. Cut to the reference day instead, the whole
+    // column slides down a day and only c to g are drawn — one square short, and
+    // the missing one is today's. Cells are emitted grouped by intensity rather
+    // than by date, so this is a set and not the order they appear in.
+    expect([...new Set(cells.map((cell) => cell.row))].sort()).toEqual([
+      'b',
+      'c',
+      'd',
+      'e',
+      'f',
+      'g',
+    ])
+  })
+
+  /**
+   * The other half of that report, and the one that would have been serious:
+   * the days of the week in progress have to count towards the figures whether
+   * or not any grid draws them. They do, because neither figure comes from the
+   * compacted array — the streak reads the dated calendar the API returned and
+   * the totals are the API's own.
+   */
+  it('counts today towards the streak and the total on every design', async () => {
+    stubGitHub()
+    vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-08-04T02:00:00Z'))
+
+    const heat = await (await get('/api?username=samefigures&card=heatmap')).text()
+    const terminal = await (await get('/api?username=samefigures')).text()
+
+    // Six days up to and including today, on the design that draws the grid and
+    // on the one that does not.
+    for (const body of [heat, terminal]) {
+      expect(body).toContain('>6<')
+    }
+    // The streak runs to today, on the card that draws no grid at all.
+    expect(terminal).toContain(formatRange('2026-07-30', '2026-08-04'))
+    // 812 this year plus 500 for each window back to 2019: the lifetime total
+    // is the API's own figure and never passes through the compacted array.
+    expect(terminal).toContain('>4,312<')
+  })
 })
 
 /**

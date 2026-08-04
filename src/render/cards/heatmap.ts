@@ -147,7 +147,20 @@ function levelsFor(calendar: CompactCalendar): number[] {
  * The calendar is exactly `WEEKS * DAYS` days long, so a day's position is its
  * index and nothing else: column `index / 7`, row `index % 7`.
  *
- * **Rows are not weekdays.** The stored calendar ends on the reference day, and
+ * **Columns are not weeks, and rows are not weekdays.** The stored calendar is
+ * exactly 371 days ending on today, so a column is seven consecutive days
+ * ending on today's row rather than Sunday to Saturday. GitHub's grid is
+ * week-aligned and ends on a partial column; ours ends on a full one. The two
+ * therefore carve the same year at different boundaries, and **counting columns
+ * between the two disagrees for that reason and not because one is missing** —
+ * this grid has drawn 53 of them, always, since it shipped.
+ *
+ * What that buys is worth naming, because the week-aligned version cannot have
+ * it: every cell here is a day that has already happened. A week-aligned last
+ * column would have to either draw the rest of this week as empty squares —
+ * indistinguishable from days somebody did nothing — or special-case them out.
+ *
+ * The stored calendar ends on today, and
  * that day is a different weekday tomorrow, so which weekday each row holds
  * shifts by one every day. There used to be a `weekdayOfFirst` offset here
  * described as padding the first column to fix exactly that; it computed

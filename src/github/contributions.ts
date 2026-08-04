@@ -29,13 +29,31 @@ import { StatsError } from './types'
  * a card and what GitHub itself shows. The streak calculation needs far less,
  * but the same array serves both.
  */
-const CALENDAR_SPAN = 53 * 7
+export const CALENDAR_SPAN = 53 * 7
 
 /**
  * Reduces a dated calendar to a positional one ending on `today`.
  *
  * Days the API did not report become zeros rather than gaps, so the array is
  * dense and the renderer can index it by offset without searching.
+ *
+ * **`today` is the UTC day, not the streak's reference day**, and the two come
+ * apart for up to twelve hours out of every twenty-four. Anywhere on Earth is
+ * the right boundary for a streak, where being generous means never cutting a
+ * run short; it is the wrong one here, where being generous means leaving out a
+ * day that has already happened and that GitHub is already drawing. The window
+ * was the reference day once, and the last square on the card was missing for
+ * half of every day as a result.
+ *
+ * The span is exact and constant: **the array is always 371 days, so the grid
+ * is always 53 full columns.** GitHub's own calendar is aligned to weeks and
+ * ends on a partial one, so its last column holds one to seven days and its
+ * total span is 365 to 371. This one ends on `today` and counts back, which
+ * means the columns are seven consecutive days rather than Sunday to Saturday —
+ * they do not line up with GitHub's, and counting columns between the two
+ * disagrees for that reason rather than because one is missing. The upside is
+ * the one that matters here: every cell is a real day in the past, so there is
+ * never a future square sitting in the grid pretending to be an idle one.
  */
 export function compactCalendar(days: readonly ContributionDay[], today: string): CompactCalendar {
   const byDate = new Map(days.map((day) => [day.date, day.count]))

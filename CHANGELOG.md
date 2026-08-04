@@ -129,6 +129,26 @@ Committed but not yet deployed.
 
 ### Fixed
 
+- **`card=heatmap` was missing today's square for half of every day.** The grid's
+  window was cut to the streak's reference day, which is Anywhere on Earth and so
+  up to twelve hours behind UTC — so from midnight UTC until noon the calendar
+  ended before today and the card had no cell for a day GitHub was already
+  drawing. The day had been fetched and stored; it was trimmed off the end of the
+  array on the way into the cache entry. The window is the UTC day now. The
+  streak keeps its own boundary, which is the point of having two.
+
+  **No figure was ever wrong**: the totals are GitHub's own
+  `totalContributions` and the streak reads the dated calendar rather than the
+  compacted one, so this was a missing square and never a missing contribution.
+
+  Reported as a missing *column*, which it was not — the grid has drawn 53 since
+  it shipped and the array is a constant 371 days. Worth knowing for anyone
+  comparing the two side by side: **this grid's columns are not GitHub's.**
+  GitHub aligns to calendar weeks and ends on a partial one; this ends on today
+  and counts back in sevens, so the boundaries differ and counting columns
+  between two landmarks disagrees. That is deliberate — it is what keeps every
+  square a day that has already happened, instead of padding the current week
+  with empty cells that look like days somebody did nothing.
 - **Three designs cut the language list without saying so.** `vinyl` drew three
   and `press` and `gauge` four, whatever `langs_count` asked for, written as a
   `slice` inside each design where nothing outside it could see the number — so

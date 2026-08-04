@@ -261,6 +261,13 @@ fixable.
   `&tz=Europe/Madrid` — any IANA zone — to have it counted in yours exactly.
 - **A zero on today does not break your streak.** The day is not over yet. The
   streak only ends once yesterday is also empty.
+- **`card=heatmap`'s columns do not line up with GitHub's.** Both draw 53, and
+  they cut the year differently: GitHub's are calendar weeks, Sunday to
+  Saturday, so its last one is however much of this week has happened. This
+  grid's last column ends on **today**, and each column is the seven days before
+  it. Counting columns between the two therefore disagrees — neither is missing
+  one. What this way buys is that every square is a day that has already
+  happened, so there is never an empty cell for a day that has not arrived yet.
 - **Public repositories only**, and forks are excluded from the language totals
   so that forking a large project does not rewrite your breakdown.
 - **Languages are sampled**, not exhaustive: the 300 most recently pushed

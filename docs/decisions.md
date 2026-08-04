@@ -927,6 +927,36 @@ So the upstream window always runs to the end of the UTC day, and the reference
 day is only what the answer is then interpreted against. The calendar covers both
 because it is fetched to the wider of the two.
 
+**And there is a third day here, which is the one that got this wrong.** The
+heatmap's window is the UTC day too, and it was the reference day for months.
+That looked like consistency and was a category error: Anywhere on Earth is a
+*generous* boundary, and generosity means opposite things to the two figures. For
+a streak it means never cutting a run short, which is the whole reason it is
+there. For a grid of what happened it means leaving out a day that already has —
+so between midnight and noon UTC the card had no square for today, a day that had
+been fetched, stored, and then trimmed off the end of the array on its way into
+the entry, while GitHub's own calendar was drawing it.
+
+**Reported as a missing column, which it was not.** The compacted array is a
+constant 371 days and the grid has drawn 53 columns since it shipped; what was
+missing was one square. Two things made it read as a column. It is the last cell
+of the last column, so its absence is at the edge where the eye goes. And the
+two grids cannot be compared column by column at all: GitHub aligns to calendar
+weeks and closes on a partial one, this closes on today and counts back in
+sevens, so the boundaries differ and any count taken between two landmarks
+differs with them. That difference is worth keeping rather than fixing —
+week-aligning the last column would mean either drawing the rest of this week as
+empty squares, indistinguishable from days somebody did nothing, or
+special-casing them out.
+
+The reassuring half, and the one to check first if this ever looks wrong again:
+**nothing numeric was ever affected.** The totals are the API's own
+`totalContributions`, and the streak reads the dated calendar the API returned
+rather than the compacted array. The trim was only ever the render's, which is
+the difference between a display bug and a data one. `test/calendar.test.ts` and
+two cases in `test/worker.test.ts` hold all of it, the second pair by running the
+whole service at 02:00 UTC, where the two days disagree.
+
 ---
 
 ## Service shape

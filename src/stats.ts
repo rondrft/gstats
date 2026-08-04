@@ -119,11 +119,17 @@ async function fetchStats(deps: StatsDeps, params: CardParams): Promise<StatsDat
   // work that has already happened: Anywhere on Earth is up to twelve hours
   // behind, so asking GitHub for "up to AoE today" would discard this morning.
   //
-  // The reference day is what the figures are then interpreted against, and it
-  // is the reader's zone or AoE. Everything the card says about "today" —
-  // whether the streak is alive, where the heatmap's last column falls — hangs
-  // off this one, and the calendar covers both because it is fetched to the
-  // wider of the two.
+  // The reference day is what the *streak* is then interpreted against, and it
+  // is the reader's zone or AoE. It is deliberately generous: a day counts for
+  // as long as it is still that day somewhere, so nobody's run is cut before
+  // their own day is over.
+  //
+  // The heatmap's window is not that day, and used to be. Generosity is the
+  // right error for a streak and the wrong one for a grid of what happened: the
+  // reference day is up to twelve hours behind UTC, so for half of every UTC day
+  // the calendar simply ended before today and the card had no square for a day
+  // GitHub was already showing. The data was fetched, stored, and then trimmed
+  // off the end. See `compactCalendar`.
   const fetchThrough = utcToday(now)
   const today = referenceToday(params.tz, now)
   const wantsLanguages = !params.hide.has('langs')
@@ -150,7 +156,7 @@ async function fetchStats(deps: StatsDeps, params: CardParams): Promise<StatsDat
     yearContributions: contributions.value.year,
     bestYearContributions: contributions.value.bestYear,
     streaks: computeStreaks(contributions.value.calendar, today),
-    calendar: compactCalendar(contributions.value.calendar, today),
+    calendar: compactCalendar(contributions.value.calendar, fetchThrough),
     // A language query that fails degrades to an empty block rather than taking
     // the whole card down: the contribution half is already correct and
     // complete, and a partial card is more useful than an error.
