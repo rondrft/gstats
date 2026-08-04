@@ -200,7 +200,31 @@ for at all; anything else gets the "user not found" card. Small to build. Listed
 here rather than higher because it only matters for one deployment mode, and that
 mode is currently documented as "do not".
 
-## 5. Nothing checks a design against Camo on the way in
+## 5. `bg=transparent` leaves the heatmap almost invisible
+
+Found while fixing the heatmap's intensity ramp, and left alone because it is a
+different question with a decision in it rather than a line to change.
+
+`mix` returns its first argument unchanged when either side is not a hex colour,
+which is right for `none` and `transparent` — there is nothing to interpolate
+between. But the heatmap builds its five fills by mixing *from the background*,
+so `?card=heatmap&bg=transparent` yields `transparent` for levels 0 to 3 and
+leaves only the top one, which is mixed from the ring colour instead. Verified:
+`empty=transparent active=[transparent, transparent, transparent, #9fb76c]`.
+
+The other designs are unaffected — they use `mix` for panels and paper, where
+falling back to the background is the sensible degradation.
+
+`trackColor` already faced the same wall and answered it by dimming the colour
+when there is no background to recede into. The heatmap needs the opposite
+direction, and the decision to make is what "away from nothing" means when the
+card is sitting on whatever the page behind it is: probably a fixed ramp from
+the ring colour's own low end, accepting that it cannot be tuned against a
+background nobody here can see. Whatever it is, `test/render.test.ts` already
+has the shape of the assertion — the contrast rules there just need a
+`transparent` case they can express.
+
+## 6. Nothing checks a design against Camo on the way in
 
 The five designs after `terminal` shipped verified by opening them in a browser,
 which is not the medium they are served in. Putting them through Camo found two
@@ -219,7 +243,7 @@ Worth knowing for whoever adds the seventh design: the useful check is a real
 README, and the useful moment is before it is published rather than after
 somebody opens an issue.
 
-## 6. The social preview image still carries the old name
+## 7. The social preview image still carries the old name
 
 `assets/brand/social-preview.png` is a 1280×640 raster, drawn by hand, that says
 `phosphor-stats` and quotes the old hostname. It is what `og:image` points at, so

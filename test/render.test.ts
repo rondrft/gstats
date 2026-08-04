@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { LOCALE_NAMES } from '../src/i18n'
 import { renderCard } from '../src/render/cards'
+import { contrastRatio } from '../src/render/color'
 import { renderErrorCard } from '../src/render/error-card'
 import { CARD_HEIGHT } from '../src/render/layout'
 import { ARC, CIRCUMFERENCE } from '../src/render/ring'
+import { THEME_NAMES, THEMES } from '../src/render/themes'
 import { paramsFixture, statsFixture } from './helpers/fixtures'
 
 /** Bytes, as served. The card lives in a README and competes with the page. */
@@ -522,18 +524,6 @@ describe('ring track recedes into the background', () => {
   const trackOf = (svg: string) =>
     /<circle[^>]*stroke="(#[0-9a-fA-F]{6})" stroke-dasharray="134.65 35"/.exec(svg)?.[1] ?? ''
 
-  const relativeLuminance = (hex: string) => {
-    const channel = (i: number) => {
-      const v = Number.parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16) / 255
-      return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4
-    }
-    return 0.2126 * channel(0) + 0.7152 * channel(1) + 0.0722 * channel(2)
-  }
-  const contrast = (a: string, b: string) => {
-    const [hi, lo] = [relativeLuminance(a), relativeLuminance(b)].sort((x, y) => y - x)
-    return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05)
-  }
-
   it.each([
     ['phosphor', '#080D08'],
     ['light', '#FFFFFF'],
@@ -546,6 +536,89 @@ describe('ring track recedes into the background', () => {
     expect(track).not.toBe('')
     // Anything above about 3:1 stops reading as absence and starts reading as a
     // second value. The light theme used to sit at 18:1.
-    expect(contrast(track, background)).toBeLessThan(3)
+    expect(contrastRatio(track, background)).toBeLessThan(3)
+  })
+})
+
+/**
+ * The other half of the same problem, in the other direction.
+ *
+ * The ring track has to stay *under* a ratio so it reads as absence. A heatmap
+ * cell has to stay *over* one so it does not. The grid was reported as losing
+ * days against GitHub's calendar and it was losing none — 103 active days in
+ * the window, 103 cells drawn — but the first active level cleared the empty one
+ * by 1.4:1 on `light` and 1.8:1 on the dark themes, so a third of the year was
+ * drawn and invisible.
+ *
+ * **The rule these pin is that a day with one contribution must be
+ * distinguishable from a day with none.** Telling it apart from a day with
+ * twenty matters less, and is what gives way when a palette runs out of range.
+ */
+describe('a heatmap cell is visible against an idle day', () => {
+  /** The five fills in ramp order, read back out of the rendered document. */
+  const rampOf = (theme: string): string[] => {
+    // Every level is used: the fixture's synthetic year covers all four active
+    // bands, and the empty fill is the one the pattern tiles.
+    const svg = renderCard(
+      statsFixture(),
+      paramsFixture(`username=x&card=heatmap&theme=${theme}&animate=false`),
+    )
+    const empty = /<use href="#a" fill="(#[0-9a-fA-F]{6})"\/>/.exec(svg)?.[1] ?? ''
+    const active = [...svg.matchAll(/<g fill="(#[0-9a-fA-F]{6})">/g)].map((match) => match[1] ?? '')
+    return [empty, ...active]
+  }
+
+  it.each(THEME_NAMES)('separates the first active level from empty on %s', (theme) => {
+    const [empty, first] = rampOf(theme)
+    const { bg, ring } = THEMES[theme] ?? { bg: '', ring: '' }
+
+    expect(empty).not.toBe('')
+    expect(first).not.toBe('')
+
+    // How much the palette has to spend in the first place. `light` runs from a
+    // white background to a mid green and has 4.5:1 in total, against 9-10:1 for
+    // the dark themes and 21:1 for mono — so it cannot afford 3:1 on the first
+    // step without flattening the three levels above it, and takes the best it
+    // has instead. That is a property of the palette, not a weaker standard.
+    const range = contrastRatio(ring ?? '', bg ?? '')
+    const required = range >= 6 ? 3 : 2
+
+    expect(
+      contrastRatio(first ?? '', empty ?? ''),
+      `${theme} (range ${range.toFixed(1)}:1)`,
+    ).toBeGreaterThanOrEqual(required)
+  })
+
+  /**
+   * And the level it gives way to. A ramp that cleared the first step by
+   * collapsing the rest would pass the assertion above and be a worse card:
+   * the quartiles exist so that both a quiet year and a busy one get a grid
+   * with gradation in it.
+   */
+  it.each(THEME_NAMES)('keeps all five levels distinct on %s', (theme) => {
+    const ramp = rampOf(theme)
+
+    expect(ramp).toHaveLength(5)
+    expect(new Set(ramp).size).toBe(5)
+
+    // Each level is further from the background than the one below it, for the
+    // three that share the background-to-ring run. The top one changes hue
+    // rather than distance, so it is only required to be its own colour.
+    const { bg } = THEMES[theme] ?? { bg: '' }
+    const distances = ramp.slice(0, 4).map((level) => contrastRatio(level, bg ?? ''))
+
+    for (let level = 1; level < distances.length; level += 1) {
+      expect(distances[level] ?? 0, `${theme} level ${level}`).toBeGreaterThan(
+        distances[level - 1] ?? 0,
+      )
+    }
+  })
+
+  /** The empty fill is the floor of all that, and must stay quiet. */
+  it.each(THEME_NAMES)('leaves the empty grid barely tinted on %s', (theme) => {
+    const [empty] = rampOf(theme)
+    const { bg } = THEMES[theme] ?? { bg: '' }
+
+    expect(contrastRatio(empty ?? '', bg ?? '')).toBeLessThan(1.3)
   })
 })

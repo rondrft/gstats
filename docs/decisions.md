@@ -202,6 +202,56 @@ Quartiles are taken over days that had *any* activity. A year is mostly zeros,
 and including them would push every boundary to zero and flatten the grid to two
 levels.
 
+### The first active level is solved for, because a fixed ramp cannot clear it
+
+`src/render/cards/heatmap.ts`, `src/render/color.ts`
+
+Reported as the grid losing days: months that GitHub's calendar showed as busy
+came out nearly blank. **Counting settled it before any of it was theorised
+about** — 103 days with activity in the window, 103 cells drawn. Nothing was
+lost. About a third of them were being drawn at a colour a reader could not
+tell from an idle day.
+
+The suspect was the quartile scaling, and it was innocent. A day with any
+activity is never level 0: `levelsFor` maps every positive count to at least
+one, whatever the boundaries do. The stretch a busy December puts on the
+quartiles moves days between levels 1 and 4; it cannot move one to nothing.
+
+The ramp was. Its stops were fixed at 0.1/0.35/0.6/0.85 along the run from the
+background to the ring colour, and the step from empty to the first active level
+measured **1.4:1 on `light` and about 1.8:1 on the dark themes**. WCAG asks 3:1
+of a graphical object, which is the right family of number for a seven pixel
+square that carries its meaning entirely in its fill.
+
+**A fixed set of stops cannot fix that, and this is the part worth keeping.**
+The mix factor that clears 3:1 is not a property of the ramp, it is a property
+of the palette: 0.375 on `mono`, about 0.5 on the three dark themes, 0.795 on
+`light`. Any constant is wrong for four of the five. So the ramp walks up from
+the empty fill until it clears the threshold and spreads what is left over the
+levels above, which lands every theme within a hundredth of 3:1 rather than
+somewhere between 1.4 and 4.
+
+Two things worth knowing before touching it.
+
+**`mono` looks like the hard case and is the easy one.** Grey against black is
+21:1 of range, the most of any theme; it was also the *least* bad before this
+at 2.5:1. `light` was the worst at 1.4:1, and is the one that still cannot
+reach the target: a white background and a mid green are 4.5:1 apart in total,
+so spending 3:1 of that on the first step leaves about 1.5:1 for the three
+above it — the two-level grid the quartiles exist to prevent. It takes the cap
+and lands near 2.2:1, the best that palette has.
+
+**Which is the trade being made deliberately, in the stated direction.** A day
+with one contribution has to be distinguishable from a day with none; telling it
+from a day with twenty matters less, and is what gives way when the range runs
+out. `light`'s middle levels are 1.2:1 apart now where they were 1.45:1.
+
+`contrastRatio` moved into `color.ts` for this, and the ring track test uses it
+too. The two decisions are the same measurement pointing in opposite
+directions — the track has to stay *under* a ratio so it reads as absence, a
+cell has to stay *over* one so it does not — and both were got wrong by eye
+first.
+
 ### Gauge needles pivot on coordinates, not `fill-box`
 
 `src/render/cards/gauge.ts`

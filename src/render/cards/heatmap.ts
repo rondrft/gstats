@@ -33,7 +33,7 @@
 import type { CardData, CompactCalendar } from '../../github/types'
 import { addDays } from '../../streak'
 import { credit, frame, motion, plate, round, svgDocument, text } from '../chrome'
-import { mix } from '../color'
+import { contrastRatio, mix } from '../color'
 import { layoutRow } from '../layout'
 import { describe, visibleStats } from './modules'
 import type { CardRenderer, RenderOptions } from './registry'
@@ -101,20 +101,86 @@ function renderHeatmap(data: CardData, { params, strings }: RenderOptions): stri
   )
 }
 
+/** The empty grid: present enough to read as a grid, and no more. */
+const EMPTY_STOP = 0.05
+
+/** Top of the run from the background towards the ring colour. */
+const TOP_STOP = 0.85
+
+/**
+ * What a single contribution has to clear an idle day by.
+ *
+ * Three is WCAG's threshold for a graphical object, and it is the right family
+ * of number here for the same reason it is there: these are 7-pixel squares
+ * carrying meaning by fill alone.
+ */
+const MIN_ACTIVE_CONTRAST = 3
+
+/**
+ * Ceiling on the first active stop.
+ *
+ * A palette with little range to spend would otherwise put level 1 so far up
+ * that levels 2 to 4 have nowhere left to go, trading the grid's whole
+ * gradation for its first step. See `intensityRamp` for which theme that is.
+ */
+const MAX_FIRST_STOP = 0.6
+
 /**
  * Five fills, from "nothing happened" to "a lot happened", built out of the
  * theme's own colours so the grid belongs to whichever palette is in use.
  * The top level reaches for the accent, which is the only place the card admits
  * a second hue and marks the reader's best days.
+ *
+ * **The first active level is solved for, not chosen.** The stops used to be
+ * fixed at 0.1/0.35/0.6/0.85, and the step from empty to level 1 measured 1.4:1
+ * on `light` and 1.8:1 on the dark themes — so a day with one contribution was
+ * very nearly a day with none. Reported as the card losing days against
+ * GitHub's calendar, and the days were all there: 103 active days in the window
+ * and 103 cells drawn. What was missing was the ability to see a third of them.
+ *
+ * A fixed set of stops cannot fix that, which is the part worth writing down.
+ * The mix factor needed to clear 3:1 is not a property of the ramp, it is a
+ * property of the palette: 0.375 on `mono`, about 0.5 on the three dark themes,
+ * and 0.795 on `light`. So the ramp walks up from the empty fill until it
+ * clears the threshold, and spreads the remaining levels over what is left.
+ *
+ * **`light` is the one that cannot get there, and it is arithmetic rather than
+ * a bug to fix.** Its background and ring colour are 4.5:1 apart in total —
+ * against 9-10:1 for the dark themes and 21:1 for `mono` — so spending 3:1 of
+ * that on the first step would leave about 1.5:1 for the three above it and
+ * flatten the grid to two levels, which is what the quartiles exist to prevent.
+ * It takes the cap instead, and lands near 2:1, which is the best that palette
+ * has. `mono`, worth saying since it looks like the hardest case and is the
+ * easiest, has the most range of all five.
  */
 function intensityRamp(bg: string, ring: string, accent: string): string[] {
+  const empty = mix(bg, ring, EMPTY_STOP)
+  const first = firstActiveStop(bg, ring, empty)
+  // Levels 2 and 3 sit evenly between the first active level and the top.
+  const step = (TOP_STOP - first) / 2
+
   return [
-    mix(bg, ring, 0.1),
-    mix(bg, ring, 0.35),
-    mix(bg, ring, 0.6),
-    mix(bg, ring, 0.85),
+    empty,
+    mix(bg, ring, first),
+    mix(bg, ring, first + step),
+    mix(bg, ring, TOP_STOP),
     mix(ring, accent, 0.45),
   ]
+}
+
+/**
+ * The lowest mix factor whose fill clears `MIN_ACTIVE_CONTRAST` against the
+ * empty one, or the cap if the palette cannot reach it.
+ *
+ * Walked rather than solved: luminance is piecewise and per channel, so there
+ * is no useful closed form, and this is a few dozen additions once per card
+ * against the 10 ms a request is allowed.
+ */
+function firstActiveStop(bg: string, ring: string, empty: string): number {
+  for (let stop = EMPTY_STOP; stop < MAX_FIRST_STOP; stop += 0.005) {
+    if (contrastRatio(mix(bg, ring, stop), empty) >= MIN_ACTIVE_CONTRAST) return stop
+  }
+  return MAX_FIRST_STOP
 }
 
 /**

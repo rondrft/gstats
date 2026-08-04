@@ -93,6 +93,22 @@ Committed but not yet deployed.
 
 ### Changed
 
+- **`card=heatmap`'s lightest active cell is now visible.** **This changes what
+  the heatmap draws** on every theme — the fills only, no geometry. A day with
+  one contribution used to clear an idle day by 1.4:1 on `light` and about
+  1.8:1 on the dark themes, which is why the grid was reported as losing days
+  against GitHub's calendar. It was losing none: 103 active days in the window
+  and 103 cells drawn, about a third of them at a colour that could not be told
+  from an empty square.
+
+  The ramp's first active stop is solved against the theme's own palette now
+  rather than fixed, because the mix needed to clear 3:1 is a property of the
+  palette and not of the ramp — 0.375 on `mono`, ~0.5 on the dark themes, 0.795
+  on `light`. Every theme lands at 3:1 except `light`, whose background and ring
+  colour are only 4.5:1 apart in total; it takes ~2.2:1, the most that palette
+  can give without flattening the levels above. The trade is deliberate and in
+  that order: **a day with one contribution has to be distinguishable from a day
+  with none, and telling it from a day with twenty is what gives way.**
 - **Language bars are drawn on a square-root scale, in half cells.** **This
   changes what `terminal` and `gauge` draw** — no widths, no positions, nothing
   else on either card, and the percentages beside the bars are untouched. The

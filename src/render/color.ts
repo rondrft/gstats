@@ -107,6 +107,41 @@ export function mix(from: string, to: string, t: number): string {
   })
 }
 
+/**
+ * WCAG relative luminance, and the contrast ratio between two colours.
+ *
+ * Here because two separate decisions turn on a measured ratio rather than on
+ * how a colour looks in one theme somebody happened to be testing: the ring
+ * track has to stay *under* a ratio so it reads as absence, and the heatmap's
+ * first active level has to stay *over* one so a single contribution is not
+ * mistaken for an idle day. Both were got wrong by eye first.
+ *
+ * A colour that cannot be parsed — `none`, `transparent` — returns 1, which is
+ * "no information" rather than a number to act on. Every caller treats it as a
+ * ratio it cannot improve.
+ */
+export function contrastRatio(a: string, b: string): number {
+  const first = relativeLuminance(a)
+  const second = relativeLuminance(b)
+  if (first === null || second === null) return 1
+
+  const lighter = Math.max(first, second)
+  const darker = Math.min(first, second)
+  return (lighter + 0.05) / (darker + 0.05)
+}
+
+function relativeLuminance(color: string): number | null {
+  const rgb = parseHex(color)
+  if (rgb === null) return null
+
+  const channel = (value: number) => {
+    const scaled = value / 255
+    return scaled <= 0.03928 ? scaled / 12.92 : ((scaled + 0.055) / 1.055) ** 2.4
+  }
+
+  return 0.2126 * channel(rgb.r) + 0.7152 * channel(rgb.g) + 0.0722 * channel(rgb.b)
+}
+
 /** Normalises a validated colour to a form SVG accepts (`abc` -> `#abc`). */
 export function normalizeColor(color: string): string {
   if (KEYWORDS.has(color.toLowerCase())) return color.toLowerCase()
