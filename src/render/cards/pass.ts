@@ -90,8 +90,8 @@ function renderPass(data: CardData, { params, strings }: RenderOptions): string 
   })
 
   const box = bodyBox(body)
-  const paper = mix(style.bg, style.text, 0.06)
-  const onBand = mix(style.bg, style.text, 0.05)
+  const paper = mix(style.surface, style.text, 0.06)
+  const onBand = mix(style.surface, style.text, 0.05)
   // The tear falls in the gap before the stub. Deriving it from the layout keeps
   // it in the right place when a module is hidden; the nominal 78% is what the
   // full card happens to work out to.

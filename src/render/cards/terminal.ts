@@ -81,7 +81,9 @@ function renderTerminal(data: CardData, { params, strings }: RenderOptions): str
         cy: layout.cy,
         pct: spec.pct,
         color: spec.color,
-        background: style.bg,
+        // The colour to recede *into*, which is a real one even when the plate
+        // is not painted. One rule for every derived tone; see `StyleParams.surface`.
+        background: style.surface,
         index,
         animate: style.animate,
       }),

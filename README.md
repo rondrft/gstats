@@ -136,7 +136,7 @@ new look ships under a new id.
 | `theme` | string | `phosphor` | `phosphor`, `amber`, `ice`, `mono`, `light`. |
 | `ring` | hex | theme | Colour of the contribution and record rings. |
 | `accent` | hex | theme | Colour of the streak ring and its icon. |
-| `bg` | hex | theme | Card background. Accepts `transparent`. |
+| `bg` | hex | theme | Card background. Accepts `transparent`, which leaves the plate unpainted and keeps the theme's colours for everything drawn on it. |
 | `text` | hex | theme | Colour of the numbers and the language rows. |
 | `muted` | hex | theme | Colour of the labels. |
 | `border` | hex | theme | Inner frame. `none` hides it. |

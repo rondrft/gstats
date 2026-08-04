@@ -162,9 +162,9 @@ function dial(
   cx: number,
   cy: number,
   index: number,
-  style: { bg: string; text: string; muted: string; ring: string; accent: string },
+  style: { bg: string; surface: string; text: string; muted: string; ring: string; accent: string },
 ): string {
-  const face = mix(style.bg, style.text, 0.07)
+  const face = mix(style.surface, style.text, 0.07)
   const ink = stat.module === 'streak' ? style.accent : style.ring
   const angle = round(START_ANGLE + SWEEP * fraction)
 

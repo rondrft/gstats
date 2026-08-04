@@ -98,7 +98,26 @@ export interface StyleParams {
   /** Which design renders the card. Unknown values resolve to the default. */
   card: string
   themeName: string
+  /** What the plate is painted with. May be `transparent` or `none`. */
   bg: string
+  /**
+   * The colour every derived tone is mixed *from*, and always a real one.
+   *
+   * Usually the same as `bg`. It exists because `bg=transparent` says "do not
+   * paint the plate" and four designs read it as "there is no palette": the
+   * heatmap's five intensity levels, the pass's paper, the gauge's dial face and
+   * the vinyl's disc are all a step from the background towards another theme
+   * colour, and `mix` returns its first argument unchanged when that argument is
+   * a keyword. So every one of them came out `transparent` and the card was very
+   * nearly blank — worse than an error, because it looks like a card that has
+   * finished loading.
+   *
+   * The answer is that a transparent card has not stopped having a palette. It
+   * still has the theme's text, ring and accent, all of which were chosen
+   * against that theme's own background, so that background is the honest thing
+   * to derive against. It is never painted; it only decides what the tones are.
+   */
+  surface: string
   border: string
   text: string
   muted: string
@@ -244,11 +263,15 @@ function parseStyle(query: URLSearchParams): StyleParams {
   const accent = parseColor(query.get('accent'), theme.accent)
   const locale = query.get('locale')?.toLowerCase() ?? DEFAULT_LOCALE
   const langStyle = query.get('lang_style')?.toLowerCase()
+  const bg = parseColor(query.get('bg'), theme.bg)
 
   return {
     card: oneOf(query.get('card'), CARD_IDS, DEFAULT_CARD),
     themeName: THEME_NAMES.includes(themeName) ? themeName : DEFAULT_THEME,
-    bg: parseColor(query.get('bg'), theme.bg),
+    bg,
+    // A keyword is not a colour to mix from; the theme's own background is the
+    // one this palette was designed against. See `StyleParams.surface`.
+    surface: COLOR_KEYWORDS.has(bg) ? theme.bg : bg,
     border: parseColor(query.get('border'), theme.border),
     text: parseColor(query.get('text'), theme.text),
     muted: parseColor(query.get('muted'), theme.muted),

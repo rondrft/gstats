@@ -145,6 +145,19 @@ Committed but not yet deployed.
 
 ### Fixed
 
+- **`bg=transparent` very nearly erased four of the six designs.** The
+  heatmap's five intensity levels, the `pass`'s paper, the `gauge`'s dial face
+  and the `vinyl`'s disc are each a step from the background towards another
+  theme colour, and there is nothing to step from when the background is a
+  keyword — so all of them came out transparent and the card was almost blank.
+  Worse than an error card, because a blank one looks like it finished loading.
+
+  Derived tones now mix from the theme's own background when the plate is not
+  being painted: **a card that is not painting its plate has not stopped having
+  a palette.** The plate is still transparent, and so are the four things that
+  are meant to be holes rather than fills — the `pass`'s perforation notches and
+  the `vinyl`'s spindle and label type. Nothing changes for any card that passes
+  a real colour, which is every other card.
 - **`card=heatmap` was missing today's square for half of every day.** The grid's
   window was cut to the streak's reference day, which is Anywhere on Earth and so
   up to twelve hours behind UTC — so from midnight UTC until noon the calendar

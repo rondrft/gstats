@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { LOCALE_NAMES } from '../src/i18n'
-import { renderCard } from '../src/render/cards'
+import { CARD_IDS, renderCard } from '../src/render/cards'
 import { contrastRatio } from '../src/render/color'
 import { renderErrorCard } from '../src/render/error-card'
 import { CARD_HEIGHT } from '../src/render/layout'
@@ -556,12 +556,12 @@ describe('ring track recedes into the background', () => {
  */
 describe('a heatmap cell is visible against an idle day', () => {
   /** The five fills in ramp order, read back out of the rendered document. */
-  const rampOf = (theme: string): string[] => {
+  const rampOf = (theme: string, extra = ''): string[] => {
     // Every level is used: the fixture's synthetic year covers all four active
     // bands, and the empty fill is the one the pattern tiles.
     const svg = renderCard(
       statsFixture(),
-      paramsFixture(`username=x&card=heatmap&theme=${theme}&animate=false`),
+      paramsFixture(`username=x&card=heatmap&theme=${theme}&animate=false${extra}`),
     )
     const empty = /<use href="#a" fill="(#[0-9a-fA-F]{6})"\/>/.exec(svg)?.[1] ?? ''
     const active = [...svg.matchAll(/<g fill="(#[0-9a-fA-F]{6})">/g)].map((match) => match[1] ?? '')
@@ -620,5 +620,88 @@ describe('a heatmap cell is visible against an idle day', () => {
     const { bg } = THEMES[theme] ?? { bg: '' }
 
     expect(contrastRatio(empty ?? '', bg ?? '')).toBeLessThan(1.3)
+  })
+
+  /**
+   * `bg=transparent` is a documented value and it used to erase this design.
+   *
+   * Every level here is a step *from* the background, and `mix` returns its
+   * first argument unchanged when that argument is not a colour — so four of
+   * the five fills came out as the literal `transparent` and the grid was very
+   * nearly blank. Worse than an error, because a blank card looks like one that
+   * has finished loading.
+   *
+   * The plate is still not painted. What changed is that the tones are derived
+   * from `surface`, which falls back to the theme's own background: a card that
+   * is not painting its plate has not stopped having a palette, and every other
+   * colour on it — text, ring, accent — was chosen against that background
+   * already. So the ramp is byte for byte the one the opaque card gets, which
+   * is also what makes every assertion above apply to this case unchanged.
+   */
+  it.each(THEME_NAMES)('keeps the whole ramp when the plate is transparent on %s', (theme) => {
+    const opaque = rampOf(theme)
+    const transparent = rampOf(theme, '&bg=transparent')
+
+    expect(transparent).toEqual(opaque)
+    for (const level of transparent) {
+      expect(level).toMatch(/^#[0-9a-f]{6}$/i)
+    }
+  })
+
+  it.each(THEME_NAMES)('is unaffected by bg=none on %s', (theme) => {
+    expect(rampOf(theme, '&bg=none')).toEqual(rampOf(theme))
+  })
+})
+
+/**
+ * The same failure, in the three other designs that build a tone out of the
+ * background: the pass's paper, the gauge's dial face and the vinyl's disc.
+ *
+ * `terminal` and `press` name no derived tone and were never affected, which is
+ * why this counts occurrences rather than asserting a design at a time — the
+ * plate itself is allowed to be transparent, and is the only thing that is.
+ */
+describe('a transparent plate does not erase the card', () => {
+  /**
+   * What is *allowed* to be transparent, per design, and why.
+   *
+   * The plate always is — that is what the parameter asks for. The other two
+   * are knockouts rather than fills: the pass punches two perforation notches
+   * out of its own edge and the vinyl has a spindle hole and type reversed out
+   * of its label, and all four are meant to show whatever is behind the card. A
+   * hole in a transparent card is transparent, which is the answer already.
+   *
+   * Everything else is a derived tone and must be a real colour. Before
+   * `surface` existed the counts here were 5, 6 and 4.
+   */
+  const KNOCKOUTS: Record<string, number> = {
+    terminal: 1,
+    heatmap: 1,
+    pass: 3,
+    press: 1,
+    gauge: 1,
+    vinyl: 3,
+  }
+
+  it.each(CARD_IDS)('paints every %s element that is not a hole', (card) => {
+    const svg = renderCard(
+      statsFixture(),
+      paramsFixture(`username=x&card=${card}&bg=transparent&animate=false`),
+    )
+
+    expect((svg.match(/fill="transparent"/g) ?? []).length).toBe(KNOCKOUTS[card])
+  })
+
+  /** And the card still has to be a card: nothing about it may go missing. */
+  it.each(CARD_IDS)('draws the same %s document either way, but for the plate', (card) => {
+    const query = `username=x&card=${card}&animate=false`
+    const opaque = renderCard(statsFixture(), paramsFixture(query))
+    const clear = renderCard(statsFixture(), paramsFixture(`${query}&bg=transparent`))
+
+    // The theme's own background is what `surface` falls back to, so the two
+    // documents differ in exactly the places that name the background and
+    // nowhere else.
+    const { bg } = THEMES.phosphor ?? { bg: '' }
+    expect(clear.split('fill="transparent"').join(`fill="${bg}"`)).toBe(opaque)
   })
 })

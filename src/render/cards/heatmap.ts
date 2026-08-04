@@ -79,7 +79,7 @@ function renderHeatmap(data: CardData, { params, strings }: RenderOptions): stri
   const left = layout.x[0] ?? 0
   const top = layout.y[0] ?? 0
 
-  const ramp = intensityRamp(style.bg, style.ring, style.accent)
+  const ramp = intensityRamp(style.surface, style.ring, style.accent)
   const levels = levelsFor(data.calendar)
 
   const body =

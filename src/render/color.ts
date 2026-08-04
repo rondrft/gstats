@@ -68,7 +68,12 @@ function toHex({ r, g, b }: Rgb): string {
  * background gives 1.4:1, in line with what the dark themes always had.
  *
  * Non-hex inputs (`none`, `transparent`, or anything that failed validation)
- * fall back to the colour itself; there is nothing to interpolate between.
+ * fall back to dimming the colour itself; there is nothing to interpolate
+ * between. **Nothing in the card path reaches that branch any more.** Every
+ * caller passes `StyleParams.surface`, which is a real colour even when the
+ * plate is not painted — the same fallback, decided once for every derived tone
+ * rather than separately here. It stays because a function that takes a colour
+ * should not be the one place that assumes its caller resolved one.
  */
 export function trackColor(color: string, background: string, factor = 0.22): string {
   if (KEYWORDS.has(color.toLowerCase())) return color

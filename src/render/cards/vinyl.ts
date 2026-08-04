@@ -86,9 +86,17 @@ function disc(
   cx: number,
   cy: number,
   data: CardData,
-  style: { bg: string; text: string; muted: string; ring: string; accent: string; locale: string },
+  style: {
+    bg: string
+    surface: string
+    text: string
+    muted: string
+    ring: string
+    accent: string
+    locale: string
+  },
 ): string {
-  const body = mix(style.bg, style.text, 0.13)
+  const body = mix(style.surface, style.text, 0.13)
   const groove = mix(body, style.text, 0.14)
   const step = (GROOVE_OUTER - GROOVE_INNER) / (GROOVE_COUNT - 1)
 

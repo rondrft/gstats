@@ -91,6 +91,44 @@ not a rounding slip.
 `layoutRow` is the same idea generalised, and every design uses it. A coordinate
 written anywhere else is a piece that will not move with the rest.
 
+### A transparent card still has a palette
+
+`src/params.ts`, and every design that derives a tone
+
+`bg=transparent` is a documented value, and it very nearly erased four of the
+six designs: the heatmap's five intensity levels, the `pass`'s paper, the
+`gauge`'s dial face and the `vinyl`'s disc. Every one of those is a step *from*
+the background towards another theme colour, and `mix` returns its first
+argument unchanged when that argument is not a colour — correctly, since there
+is nothing to interpolate between. So they all came out as the literal
+`transparent`. **Worse than an error card**, which at least says something: a
+blank card looks like one that has finished loading.
+
+The fix is a distinction rather than a special case. `bg` is *what the plate is
+painted with* and may be a keyword; `surface` is *what tones are derived
+against* and is always a real colour, falling back to the theme's own
+background. A card that is not painting its plate has not stopped having a
+palette — its text, ring and accent are still the theme's, and every one of them
+was chosen against that theme's background, so that background is the honest
+thing to mix from. It is never painted.
+
+Resolved once in `parseStyle` rather than in each design, which is the part that
+matters: the same mistake was available to every design that ever reaches for a
+derived tone, and four of six had already made it. The next one cannot.
+
+**The ring track was the same question, answered separately and earlier.**
+`trackColor` has its own branch for a keyword background, which dims the ring
+colour instead of receding into anything. That branch is now unreachable from
+any card — every caller passes `surface` — and it stays only so that a function
+taking a colour is not the one place assuming its caller resolved one. Two
+answers to one question is how they drift.
+
+What is still deliberately transparent is the four *knockouts*: the plate
+itself, the `pass`'s two perforation notches, and the `vinyl`'s spindle hole and
+the type reversed out of its label. Those are holes rather than fills, and a
+hole in a transparent card is transparent. `test/render.test.ts` counts them per
+design, so a fill that goes missing cannot hide among them.
+
 ### The theme contract beats fidelity to a mockup
 
 `src/render/cards/pass.ts`, `src/render/chrome.ts`

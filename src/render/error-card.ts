@@ -87,7 +87,7 @@ export function renderErrorCard({ kind, style, retryAfterMinutes }: ErrorCardOpt
     cy,
     pct: 0,
     color: style.accent,
-    background: style.bg,
+    background: style.surface,
     index: 0,
     animate: false,
   })
